@@ -1,0 +1,7 @@
+https://github.com/fabiocarrara/expman/archive/refs/tags/v0.1.0.tar.gz
+faiss-cpu
+h5py
+numpy
+requests
+seaborn
+tqdm
