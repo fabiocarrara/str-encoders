@@ -1,13 +1,61 @@
-import itertools
 import math
 
 import faiss
+from joblib import cpu_count, delayed, Parallel
 import numpy as np
 from scipy.sparse import csr_matrix, vstack
 from scipy.spatial.distance import cdist
 
+from surrogate.str_index import SurrogateTextIndex
+# from utils import parallel_cdist as cdist
 
-class SPQR:
+def _spqr_encode(
+    x,             # features to encode
+    l1_centroids,  # coarse centroids
+    l2_centroids,  # fine centroids
+    k,             # permutation prefix length
+):
+    n = len(x)
+    m, f, _ = l2_centroids.shape
+
+    # find nearest coarse centroids
+    coarse_codes = cdist(x, l1_centroids, metric='sqeuclidean').argmin(axis=1) # n 
+
+    # compute residual
+    residuals = x - l1_centroids[coarse_codes]  # n x d
+    residuals = np.split(residuals, m, axis=1)  # m x n x d/m
+
+    # compute distances to fine centroids for each subvector
+    fine_distances = np.array([ cdist(r, c, metric='sqeuclidean')
+            for r, c in zip(residuals, l2_centroids) ])  # m x n x f
+
+    # find top-k NNs for each subvector:
+    # this sorts the entire array (inefficient), but needed if k == f ...
+    if k == f:
+        topk = fine_distances.argsort(axis=2)[:, :, :k]  # m x n x k
+    else:
+    # ... while this partitions the array and sorts only the topk
+        unsorted_topk = fine_distances.argpartition(k, axis=2)[:, :, :k]
+        sorted_topk_idx = np.take_along_axis(fine_distances, unsorted_topk, axis=2).argsort(axis=2)
+        topk = np.take_along_axis(unsorted_topk, sorted_topk_idx, axis=2)  # m x n x k
+
+    # build the representation
+    rows = np.arange(n).reshape(1, -1, 1)
+    m_shifts = np.arange(m).reshape(-1, 1, 1)
+    c_shifts = coarse_codes.reshape(1, -1, 1)
+    cols = topk + f * m_shifts + f * m * c_shifts
+    data = np.arange(k, 0, -1).reshape(1, 1, -1)
+    
+    rows, cols, data = np.broadcast_arrays(rows, cols, data)
+
+    rows = rows.flatten()
+    cols = cols.flatten()
+    data = data.flatten()
+
+    return rows, cols, data, n
+
+
+class SPQR(SurrogateTextIndex):
     """ Implements Surrogate of Product Quantizator Representation (SQPR). """
 
     def __init__(
@@ -16,6 +64,7 @@ class SPQR:
         n_coarse_centroids=None,
         n_subvectors=None,
         n_fine_centroids_log2=None,
+        parallel=False
     ):
         """ Constructor.
         Args:
@@ -43,6 +92,7 @@ class SPQR:
         ), "You must specify a prebuilt faiss index " \
             "or all the params (as ints) needed to build the index."
 
+        self.parallel = parallel
         self.l1_centroids = None
         self.l2_centroids = None
         self.db = None
@@ -85,64 +135,13 @@ class SPQR:
         self.faiss_index.train(x)
         self._load_centroids()
     
-    def encode_one(self, x, permutation_length=None):
-        """ Encodes one vector and returns the SPQR representation.
-        Args:
-            x (ndarray): a (D,)-shaped vector to be encoded.
-            permutation_length (int): the number of nearest fine centroids to keep
-                                      when truncating the permutation; if None, the
-                                      whole permutation is used. Defaults to None.
-        """
-        assert self.faiss_index.is_trained, "Index must be trained before encoding."
+    def encode(self, *args, **kwargs):
+        if self.parallel:
+            return self.encode_parallel(*args, **kwargs)
+        
+        return self.encode_sequential(*args, **kwargs)
 
-        k = self.f if permutation_length is None else permutation_length
-        d = x.shape[0]
-
-        assert self.d == d, f"Dimension mismatch: expected {self.d}, got {d}"
-
-        # find nearest coarse centroid
-        coarse_code = cdist(x.reshape(1, -1), self.l1_centroids, metric='euclidean').squeeze().argmin()
-
-        # compute residual
-        residual = x - self.l1_centroids[coarse_code]
-        residual = np.split(residual, self.m)
-
-        # compute distances to fine centroids for each subvector
-        fine_distances = np.array([
-            cdist(r.reshape(1, -1), c, metric='euclidean').squeeze()
-                for r, c in zip(residual, self.l2_centroids)
-        ])  # m x f
-
-        # find top-k NNs for each subvector
-        topk = fine_distances.argsort(axis=1)[:, :k]  # m x k
-
-        # build the representation
-        """
-        # the nested-for-loops way ...
-        rows, cols, data = [], []
-        for i, nns in enumerate(topk):
-            for importance, nn in enumerate(nns[::-1], start=1):
-                rows.append(0)
-                cols.append(nn + self.f * i + self.f * self.m * coarse_code)
-                data.append(importance)
-
-        rows = np.array(rows)
-        cols = np.array(cols)
-        data = np.array(data)
-        sparse_repr = csr_matrix((data, (rows, cols)), shape=(1, self.vocab_size))
-        """
-
-        # ... or the vectorized way
-        shifts = np.broadcast_to(np.arange(self.m).reshape(-1, 1), topk.shape)
-        cols = (topk + self.f * shifts + self.f * self.m * coarse_code).flatten()
-        data = np.broadcast_to(np.arange(k, 0, -1).reshape(1, -1), topk.shape).flatten()
-        rows = np.zeros_like(cols)
-
-        sparse_repr = csr_matrix((data, (rows, cols)), shape=(1, self.vocab_size))
-
-        return sparse_repr
-
-    def encode(self, x, permutation_length=None):
+    def encode_sequential(self, x, permutation_length=None):
         """ Encodes vectors and returns their SPQR representations.
         Args:
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
@@ -158,18 +157,25 @@ class SPQR:
         assert self.d == d, f"Dimension mismatch: expected {self.d}, got {d}"
 
         # find nearest coarse centroids
-        coarse_codes = cdist(x, self.l1_centroids, metric='euclidean').argmin(axis=1) # n 
+        coarse_codes = cdist(x, self.l1_centroids, metric='sqeuclidean').argmin(axis=1) # n 
 
         # compute residual
         residuals = x - self.l1_centroids[coarse_codes]  # n x d
         residuals = np.split(residuals, self.m, axis=1)  # m x n x d/m
 
         # compute distances to fine centroids for each subvector
-        fine_distances = np.array([ cdist(r, c, metric='euclidean')
+        fine_distances = np.array([ cdist(r, c, metric='sqeuclidean')
                 for r, c in zip(residuals, self.l2_centroids) ])  # m x n x f
 
-        # find top-k NNs for each subvector
-        topk = fine_distances.argsort(axis=2)[:, :, :k]  # m x n x k
+        # find top-k NNs for each subvector:
+        # this sorts the entire array (inefficient), but needed if k == f ...
+        if k == self.f:
+            topk = fine_distances.argsort(axis=2)[:, :, :k]  # m x n x k
+        else:
+        # ... while this partitions the array and sorts only the topk
+            unsorted_topk = fine_distances.argpartition(k, axis=2)[:, :, :k]
+            sorted_topk_idx = np.take_along_axis(fine_distances, unsorted_topk, axis=2).argsort(axis=2)
+            topk = np.take_along_axis(unsorted_topk, sorted_topk_idx, axis=2)  # m x n x k
 
         # build the representation
         # the nested-for-loops way ...
@@ -206,54 +212,19 @@ class SPQR:
 
         return sparse_repr
 
-    def add(self, x, permutation_length=None):
-        """ Encodes and stores encoded vectors (in sparse format) for subsequent search.
-        Args:
-            x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
-            permutation_length (int): the number of nearest fine centroids to keep
-                                      when truncating the permutation; if None, the
-                                      whole permutation is used. Defaults to None.
-        """
-        x_enc = self.encode(x, permutation_length=permutation_length)
-        self.db = vstack((self.db, x_enc))
+    def encode_parallel(self, x, permutation_length=None):
 
-    def reset(self):
-        """ Clears the index removing stored vectors. The learned centroids are kept. """
-        del self.db
-        self.db = csr_matrix((0, self.vocab_size), dtype='float32')
-    
-    def search(self, q, permutation_length=None, k=None):
-        """ Performs bruteforce search with given queries.
-        Args:
-            q (ndarray): a (N,D)-shaped matrix of query vectors.
-            permutation_length (int): the number of nearest fine centroids to keep
-                                      when truncating the permutation; if None, the
-                                      whole permutation is used. Defaults to None.
-            k (int): the number of nearest neighbors to return; if None, all the
-                     database will be returned in the result set. Defaults to None.
-        """
-        k = self.db.shape[0] if k is None else k
-        nq = len(q)
+        k = self.f if permutation_length is None else permutation_length
 
-        q_enc = self.encode(q, permutation_length=permutation_length)
+        batch_size = int(math.ceil(len(x) / cpu_count()))
+        results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
+            delayed(_spqr_encode)(x[i:i+batch_size], self.l1_centroids, self.l2_centroids, k)
+            for i in range(0, len(x), batch_size)
+        )
 
-        ## this materializes in RAM the entire score matrix ...
-        # scores = q_enc.dot(self.db.T).toarray()
-        # indices = scores.argsort(axis=1)[:, ::-1][:, :k]
-        # sorted_scores = scores[np.arange(nq).reshape(-1, 1), indices]
+        results = vstack([
+            csr_matrix((data, (rows, cols)), shape=(n, self.vocab_size))
+            for rows, cols, data, n in results
+        ])
 
-        ## ... this instead materializes only nonzero scores
-        indices = np.full((nq, k), -1, dtype='int')
-        sorted_scores = np.zeros((nq, k), dtype='float32')
-
-        scores = q_enc.dot(self.db.T)
-        nonzero_scores = scores.nonzero()
-        # group scores by query_idx and process each query independently
-        for query_idx, nonzero_idx in itertools.groupby(zip(*nonzero_scores), key=lambda x: x[0]):
-            nonzero_idx = np.array([e[1] for e in nonzero_idx])
-            query_nonzero_scores = scores[query_idx, nonzero_idx].toarray()[0]
-            query_neighbors = query_nonzero_scores.argsort()[::-1][:k]
-            indices[query_idx, :len(query_neighbors)] = nonzero_idx[query_neighbors]
-            sorted_scores[query_idx, :len(query_neighbors)] = query_nonzero_scores[query_neighbors]
-
-        return sorted_scores, indices
+        return results
