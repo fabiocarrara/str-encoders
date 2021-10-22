@@ -1,7 +1,8 @@
 import math
 import numpy as np
 from joblib import cpu_count, delayed, Parallel
-from scipy.sparse import csr_matrix, vstack
+from scipy import sparse
+import utils
 
 from surrogate.str_index import SurrogateTextIndex
 
@@ -17,12 +18,7 @@ def _deep_perm_encode(
     n, d = x.shape
 
     k = d if permutation_length is None else permutation_length
-    if k == d:
-        topk = x.argsort(axis=1)[:, ::-1]
-    else:
-        unsorted_topk = x.argpartition(-k)[:, -k:]
-        sorted_topk_idx = np.take_along_axis(x, unsorted_topk, axis=1).argsort(axis=1)[:, ::-1]
-        topk = np.take_along_axis(unsorted_topk, sorted_topk_idx, axis=1)  # n x k
+    topk = utils.topk_sorted(x, k, axis=1)  # n x k
 
     rows = np.arange(n).reshape(-1, 1)
     cols = topk
@@ -61,38 +57,39 @@ class DeepPermutation(SurrogateTextIndex):
         self.d = d
         self.permutation_length = permutation_length
         self.rectify_negatives = rectify_negatives
-        self.parallel = parallel
 
         vocab_size = 2 * d if self.rectify_negatives else d
-        super().__init__(vocab_size)
+        super().__init__(vocab_size, parallel)
 
-    def encode(self, x):
+    def encode(self, x, inverted=True):
         """ Encodes vectors and returns their term-frequency representations.
         Args:
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
         """
         if self.parallel:
-            return self.encode_parallel(x)
+            batch_size = int(math.ceil(len(x) / cpu_count()))
+            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
+                delayed(_deep_perm_encode)(x[i:i+batch_size], self.permutation_length, self.rectify_negatives)
+                for i in range(0, len(x), batch_size)
+            )
+
+            # use COO for fast sparse matrix concatenation
+            results = [sparse.coo_matrix((data, (rows, cols)), shape=(n, self.vocab_size)) for rows, cols, data, n in results]
+            results = sparse.vstack(results)
+            results = results.T if inverted else results
+            # then convert to CSR
+            results = results.tocsr()
+            return results
         
         # non-parallel version
         rows, cols, data, n = _deep_perm_encode(x, self.permutation_length, self.rectify_negatives)
-        sparse_repr = csr_matrix((data, (rows, cols)), shape=(n, self.vocab_size))
-        return sparse_repr
-    
-    def encode_parallel(self, x):
+        if inverted:
+            rows, cols = cols, rows
+            shape = (self.vocab_size, n)
+        else:
+            shape = (n, self.vocab_size)
 
-        batch_size = int(math.ceil(len(x) / cpu_count()))
-        results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
-            delayed(_deep_perm_encode)(x[i:i+batch_size], self.permutation_length, self.rectify_negatives)
-            for i in range(0, len(x), batch_size)
-        )
-
-        results = vstack([
-            csr_matrix((data, (rows, cols)), shape=(n, self.vocab_size))
-            for rows, cols, data, n in results
-        ])
-
-        return results
+        return sparse.csr_matrix((data, (rows, cols)), shape=shape)
     
     def train(self, x):
         """ Learn parameters from data.
