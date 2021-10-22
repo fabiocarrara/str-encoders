@@ -1,8 +1,61 @@
 from abc import ABC, abstractmethod
-import itertools
+import math
 
 import numpy as np
-from scipy.sparse import csr_matrix, vstack
+from joblib import cpu_count, delayed, Parallel
+from scipy import sparse
+
+import utils
+
+
+def _csr_hstack(blocks):
+    """ A faster version of hstack for CSR matrix. """
+    num_rows, num_cols = np.array([b.shape for b in blocks]).T
+    
+    assert np.all(num_rows == num_rows[0]), "blocks have different row numbers"
+    num_rows = num_rows[0]
+
+    res_indptr = np.sum([b.indptr for b in blocks], axis=0)
+    res_data = np.empty(res_indptr[-1], dtype=blocks[0].data.dtype)
+    res_indices = np.empty(res_indptr[-1], dtype=blocks[0].indices.dtype)
+
+    offsets = np.cumsum(num_cols)
+    offsets = np.insert(offsets, 0, 0)
+    num_cols = offsets[-1]
+    
+    for i in range(num_rows):
+        res_start = res_indptr[i]
+        for b, o in zip(blocks, offsets):
+            b_start, b_end = b.indptr[i], b.indptr[i+1]
+            b_nnz = b_end - b_start
+            res_end = res_start + b_nnz
+            res_data[res_start:res_end] = b.data[b_start:b_end]
+            res_indices[res_start:res_end] = b.indices[b_start:b_end] + o
+            res_start = res_end
+
+    return sparse.csr_matrix((res_data, res_indices, res_indptr), shape=(num_rows, num_cols))
+
+
+def _search(
+    q_enc,
+    db,
+    k
+):
+    nq = q_enc.shape[0]
+    indices = np.full((nq, k), -1, dtype='int')
+    sorted_scores = np.zeros((nq, k), dtype='float32')
+    
+    scores = q_enc.dot(db)
+
+    for query_idx, query_scores in enumerate(scores):
+        if query_scores.nnz == 0:
+            continue
+        
+        query_neighbors = utils.topk_sorted(query_scores.data, k)
+        indices[query_idx, :len(query_neighbors)] = query_scores.indices[query_neighbors]
+        sorted_scores[query_idx, :len(query_neighbors)] = query_scores.data[query_neighbors]
+    
+    return sorted_scores, indices 
 
 
 class SurrogateTextIndex(ABC):
@@ -10,10 +63,14 @@ class SurrogateTextIndex(ABC):
         and computing scores as inner products using inverted lists.
     """
 
-    def __init__(self, vocab_size):
+    def __init__(self, vocab_size, parallel):
         """ Constructor """
         self.db = None
         self.vocab_size = vocab_size
+        self.parallel = parallel
+
+        self._to_commit = []
+        self.reset()
 
     def add(self, x, *args, **kwargs):
         """ Encodes and stores encoded vectors (in sparse format) for subsequent search.
@@ -21,26 +78,38 @@ class SurrogateTextIndex(ABC):
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
             args, kwargs: additional arguments for the encode() method.
         """
-        x_enc = self.encode(x, *args, **kwargs)
-        self.db = vstack((self.db, x_enc))
+        x_enc = self.encode(x, inverted=True, *args, **kwargs)
+        self._to_commit.append(x_enc)
+    
+    def commit(self):
+        self.db = _csr_hstack([self.db] + self._to_commit)
+        self._to_commit.clear()
     
     @property
-    def num_elements(self):
+    def density(self):
         """Returns the number of non-zero elements stored in the posting lists of the index."""
-        return self.db.nnz
+        return self.db.nnz / np.prod(self.db.shape)
+    
+    @property
+    def dirty(self):
+        """Returns whether there are added vectors to commit."""
+        return bool(self._to_commit)
 
     @abstractmethod
-    def encode(self, x):
+    def encode(self, x, inverted=True):
         """ Encodes vectors and returns their term-frequency representations.
         Args:
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
+            inverted (bool): if True, returns the (V,N)-shaped inverted representation
+        Returns:
+            x_enc (sparse.csr_matrix): the encoded vectors
         """
         raise NotImplementedError
 
     def reset(self):
         """ Clears the index removing stored vectors. Values of learned parameters are kept. """
         del self.db
-        self.db = csr_matrix((0, self.vocab_size), dtype='int32')
+        self.db = sparse.csr_matrix((self.vocab_size, 0), dtype='int')
 
     def search(self, q, k, *args, **kwargs):
         """ Performs kNN search with given queries.
@@ -48,32 +117,29 @@ class SurrogateTextIndex(ABC):
             q (ndarray): a (N,D)-shaped matrix of query vectors.
             k (int): the number of nearest neighbors to return.
             args, kwargs: additional arguments for the encode() method.
+
+        Returns:
+            ndarray: a (N,D)-shaped matrix of sorted scores.
+            ndarray: a (N,D)-shaped matrix of kNN indices.
         """
         k = self.db.shape[0] if k is None else k
-        nq = len(q)
+        nq = q.shape[0]
 
-        q_enc = self.encode(q, *args, **kwargs)
+        q_enc = self.encode(q, *args, inverted=False, **kwargs)
 
-        ## this materializes in RAM the entire score matrix ...
-        # scores = q_enc.dot(self.db.T).toarray()
-        # indices = scores.argsort(axis=1)[:, ::-1][:, :k]
-        # sorted_scores = scores[np.arange(nq).reshape(-1, 1), indices]
+        if self.parallel:
+            batch_size = int(math.ceil(nq / cpu_count()))
+            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
+                delayed(_search)(q_enc[i:i+batch_size], self.db, k)
+                for i in range(0, nq, batch_size)
+            )
 
-        breakpoint()
+            sorted_scores, indices = zip(*results)
+            sorted_scores = np.vstack(sorted_scores)
+            indices = np.vstack(indices)
 
-        ## ... this instead materializes only nonzero scores
-        indices = np.full((nq, k), -1, dtype='int')
-        sorted_scores = np.zeros((nq, k), dtype='float32')
-
-        scores = q_enc.dot(self.db.T)
-        nonzero_scores = scores.nonzero()
-        # group scores by query_idx and process each query independently
-        for query_idx, nonzero_idx in itertools.groupby(zip(*nonzero_scores), key=lambda x: x[0]):
-            nonzero_idx = np.array([e[1] for e in nonzero_idx])
-            query_nonzero_scores = scores[query_idx, nonzero_idx].toarray()[0]
-            query_neighbors = query_nonzero_scores.argsort()[::-1][:k]
-            indices[query_idx, :len(query_neighbors)] = nonzero_idx[query_neighbors]
-            sorted_scores[query_idx, :len(query_neighbors)] = query_nonzero_scores[query_neighbors]
+        else:  # sequential version
+            sorted_scores, indices = _search(q_enc, self.db, k)
 
         return sorted_scores, indices
     
