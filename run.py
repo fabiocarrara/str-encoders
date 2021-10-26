@@ -14,7 +14,8 @@ from utils import get_ann_benchmark, nice_logspace, compute_recalls
 
 
 def main(args):
-    exp = Experiment(args, root=args.exp_root, ignore=('data_root', 'exp_root', 'force', 'batch_size'))
+    ignore = ('data_root', 'exp_root', 'force', 'index_batch_size', 'search_batch_size')
+    exp = Experiment(args, root=args.exp_root, ignore=ignore)
     print(exp)
 
     # setup logging
@@ -38,8 +39,9 @@ def main(args):
     _, lim = true_neighbors.shape
 
     index_type = args.index_type
-    index_params = {k: v for k, v in vars(args).items() if k not in ('dataset', 'data_root', 'exp_root', 'force', 'batch_size', 'index_type')}
+    index_params = {k: v for k, v in vars(args).items() if k not in ('dataset', 'index_type') + ignore}
 
+    # train index
     trained_index_path = exp.path_to('empty_trained_index.pickle')
     train_time_path = exp.path_to('train_time.txt')
     if not Path(trained_index_path).exists() or args.force:
@@ -49,7 +51,7 @@ def main(args):
         index = surrogate.index_factory(d, index_type, index_params)
         index.train(x)
         train_time = time.time() - train_time
-        logging.info('done')
+        logging.info(f'Done in {train_time} s.')
 
         # save trained index
         logging.info('Saving trained index ...')
@@ -58,52 +60,73 @@ def main(args):
 
         with open(train_time_path, 'w') as f:
             f.write(str(train_time))
-        logging.info('done')
+        logging.info(f'Done: {trained_index_path}')
     else:
-        logging.info(f'Reading prebuilt index from: {trained_index_path} ...')
+        logging.info(f'Reading pretrained index from: {trained_index_path} ...')
         with open(trained_index_path, 'rb') as f:
             index = pickle.load(f)
 
         with open(train_time_path, 'r') as f:
             train_time = float(f.read().strip())
-        logging.info('done')
-
-    metrics_path = exp.path_to('metrics.csv.gz')
-    metrics = pd.read_csv(metrics_path) if Path(metrics_path).exists() else pd.DataFrame()
 
     # build index
-    logging.info('Building index ...')
-    build_time = time.time()
-    batch_size = n if args.batch_size is None else args.batch_size
-    for i in trange(0, len(x), batch_size):
-        index.add(x[i:i+batch_size])
-    build_time = time.time() - build_time + train_time
-    logging.info('done')
+    built_index_path = exp.path_to('built_index.pickle')
+    build_time_path = exp.path_to('build_time.txt')
+    if not Path(built_index_path).exists() or args.force:
+        # train index
+        logging.info('Building index ...')
+        batch_size = n if args.index_batch_size is None else args.index_batch_size
+        build_time = time.time()
+        for i in trange(0, len(x), batch_size, desc='ADD'):
+            index.add(x[i:i+batch_size])
+        index.commit()
+        build_time = time.time() - build_time
+        logging.info(f'Done in {build_time} s.')
+
+        # save trained index
+        logging.info(f'Saving built index: {built_index_path}')
+        with open(built_index_path, 'wb') as f:
+            pickle.dump(index, f)
+
+        with open(build_time_path, 'w') as f:
+            f.write(str(build_time))
+    else:
+        logging.info(f'Reading prebuilt index from: {built_index_path}')
+        with open(built_index_path, 'rb') as f:
+            index = pickle.load(f)
+
+        with open(build_time_path, 'r') as f:
+            build_time = float(f.read().strip())
+
+    metrics_path = exp.path_to('metrics.csv.gz')
+    if Path(metrics_path).exists() and not args.force:
+        logging.info(f'Skipping: {metrics_path} found.')
+        return
 
     # search and evaluate
+    logging.info(f'Index density: {index.density:.2%}')
+    batch_size = len(q) if args.search_batch_size is None else args.search_batch_size
     logging.info('Searching and Evaluating index ...')
     search_time = time.time()
     nns = []
-    for i in trange(0, len(q), batch_size):
+    for i in trange(0, len(q), batch_size, desc='SEARCH'):
         _, nns_batch = index.search(q[i:i+batch_size], k=lim)
         nns.append(nns_batch)
     nns = np.vstack(nns)
-
     search_time = time.time() - search_time
 
-    new_metrics = pd.DataFrame([{
-        'index': index_type,
-        **index_params,
+    metrics = pd.DataFrame([{
         'build_time': build_time,
+        'index_density': index.density,
+        'num_entries': index.db.nnz,
         'search_time': search_time,
         'k': k,
         'recall@k': compute_recalls(true_neighbors[:, :k], nns[:, :k]).mean(),
     } for k in nice_logspace(lim)])
 
-    metrics = pd.concat((metrics, new_metrics), ignore_index=True)
     metrics.to_csv(metrics_path, index=False)
 
-    logging.info('done')
+    logging.info(f'Done in {search_time} s.')
     return
 
 
@@ -130,7 +153,8 @@ if __name__ == "__main__":
     parser.add_argument('--exp-root', default='runs/', help='where to store results')
 
     parser.add_argument('--force', default=False, action='store_true', help='force index training')
-    parser.add_argument('-b', '--batch-size', type=int, default=None, help='index data in batches with this size')
+    parser.add_argument('-b', '--index-batch-size', type=int, default=None, help='index data in batches with this size')
+    parser.add_argument('-B', '--search-batch-size', type=int, default=None, help='search data in batches with this size')
     args, rest = parser.parse_known_args()
 
     index_parser = surrogate.argparser()
