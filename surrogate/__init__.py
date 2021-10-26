@@ -35,6 +35,6 @@ def argparser():
     spqr_parser = subparsers.add_parser('spqr', help='SPQR STR Index')
     spqr_parser.add_argument('-c', '--n-coarse-centroids', type=int, default=None, help='no of coarse centroids')
     spqr_parser.add_argument('-m', '--n-subvectors', type=int, default=None, help='no of subvectors for PQ')
-    spqr_parser.add_argument('-f', '--n-fine-centroids', type=int, choices=(2**4, 2**8, 2**12, 2**16), default=2**8, help='no of fine centroids')
+    spqr_parser.add_argument('-f', '--n-fine-centroids', type=int, default=2**8, help='no of fine centroids')
 
     return parser

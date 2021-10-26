@@ -1,3 +1,5 @@
+import functools
+import logging
 import math
 
 import faiss
@@ -5,9 +7,59 @@ from joblib import cpu_count, delayed, Parallel
 import numpy as np
 from scipy import sparse
 from scipy.spatial.distance import cdist
+from sklearn.cluster import KMeans, MiniBatchKMeans
 
 from surrogate.str_index import SurrogateTextIndex
 import utils
+
+def _spqr_train_sklearn(
+    x,                            # vectors to train from
+    c,                            # number of coarse centroids
+    m,                            # number of subvectors
+    f,                            # number of fine centroids
+    c_redo=1,                     # number of kmeans runs with different seeds (coarse)
+    c_iter=100,                   # maximum number of kmeans iterations (coarse)
+    f_redo=1,                     # number of kmeans runs with different seeds (fine)
+    f_iter=100,                   # maximum number of kmeans iterations (fine)
+    max_samples_per_centroid=256, # max samples per centroid; if more, we subsample
+    verbose=0                     # verbosity level
+):
+    # kmeans = KMeans
+    kmeans = functools.partial(MiniBatchKMeans, batch_size=256*cpu_count(), compute_labels=False)
+
+    nx = len(x)
+    xt = x
+    max_samples = max_samples_per_centroid * c
+    if nx > max_samples:  # subsample train set
+        logging.info(f'subsampling {max_samples} / {nx} for coarse centroid training.')
+        subset = np.random.choice(nx, size=max_samples, replace=False)
+        xt = x[subset]
+
+    # compute coarse centroids
+    l1_kmeans = kmeans(n_clusters=c, n_init=c_redo, max_iter=c_iter, verbose=verbose)
+    l1_kmeans.fit(xt)
+    l1_centroids = l1_kmeans.cluster_centers_
+
+    max_samples = max_samples_per_centroid * f
+    if nx > max_samples:  # subsample train set
+        logging.info(f'subsampling {max_samples} / {nx} for fine centroid training.')
+        subset = np.random.choice(nx, size=max_samples, replace=False)
+        xt = x[subset]
+
+    # compute residuals
+    coarse_codes = l1_kmeans.predict(xt)
+    residuals = xt - l1_centroids[coarse_codes]  # n x d
+    residuals = np.split(residuals, m, axis=1)  # m x n x d/m
+
+    l2_centroids = []
+    for sub_vector in residuals:
+        l2_kmeans = kmeans(n_clusters=f, n_init=f_redo, max_iter=f_iter, verbose=verbose)
+        l2_kmeans.fit(sub_vector)
+        l2_centroids.append(l2_kmeans.cluster_centers_)  # f x d/m
+
+    l2_centroids = np.stack(l2_centroids) # m x f x d/m
+
+    return l1_centroids, l2_centroids
 
 
 def _spqr_encode(
@@ -27,11 +79,20 @@ def _spqr_encode(
     residuals = np.split(residuals, m, axis=1)  # m x n x d/m
 
     # compute distances to fine centroids for each subvector
+    # vectorized, but memory-hungry ...
+    """ 
     fine_distances = np.array([ cdist(r, c, metric='sqeuclidean')
             for r, c in zip(residuals, l2_centroids) ])  # m x n x f
 
     # find kNNs for each subvector
-    nns = utils.bottomk_sorted(fine_distances, k, axis=2)
+    nns = utils.bottomk_sorted(fine_distances, k, axis=2)  # m x n x k
+    """
+
+    # ... a subvector at a time, less memory consumption (also faster?!)
+    nns = np.empty((m, n, k), dtype=int)
+    for i, (sub_residuals, sub_centroids) in enumerate(zip(residuals, l2_centroids)):
+        sub_fine_distances = cdist(sub_residuals, sub_centroids, metric='sqeuclidean')  # n x f
+        nns[i] = utils.bottomk_sorted(sub_fine_distances, k, axis=1)  # n x k
 
     # build the representation
     # the nested-for-loops way ...
@@ -66,6 +127,10 @@ def _spqr_encode(
     return rows, cols, data, n
 
 
+def is_power_of_two(n):
+    return (n != 0) and (n & (n-1) == 0)
+
+
 class SPQR(SurrogateTextIndex):
     """ Implements Surrogate of Product Quantizator Representation (SQPR). """
 
@@ -74,8 +139,9 @@ class SPQR(SurrogateTextIndex):
         d_or_index,
         n_coarse_centroids=None,
         n_subvectors=None,
-        n_fine_centroids_log2=None,
-        parallel=True
+        n_fine_centroids=None,
+        engine='sklearn',
+        parallel=True,
     ):
         """ Constructor.
         Args:
@@ -85,53 +151,54 @@ class SPQR(SurrogateTextIndex):
                                       quantizer (voronoi partitioning).
             n_subvectors (int): the number of subvectors of the level 2 quantizer
                                 (product quantization).
-            n_fine_centroids_log2 (int): the log2() of number of fine centroids for
-                                         the level 2 quantizer (product quantization);
-                                         FAISS currently support 4, 8, 12, 16 on CPU.
+            n_fine_centroids (int): the number of fine centroids for the level 2
+                                    quantizer (product quantization); must be a power
+                                    of two if engine='faiss'
+            engine (str): k-means implementation ('faiss' or 'sklearn')
         """
 
         assert (
             isinstance(d_or_index, int) and \
             isinstance(n_coarse_centroids, int) and \
             isinstance(n_subvectors, int) and \
-            isinstance(n_fine_centroids_log2, int)
+            isinstance(n_fine_centroids, int)
         ) or (
             isinstance(d_or_index, faiss.swigfaiss.IndexIVFPQ) and
             (n_coarse_centroids is None) and \
             (n_subvectors is None) and \
-            (n_fine_centroids_log2 is None)
+            (n_fine_centroids is None)
         ), "You must specify a prebuilt faiss index " \
             "or all the params (as ints) needed to build the index."
 
+        supported = ('faiss', 'sklearn')
+        assert engine in supported, f'Unknown engine: {engine}. Supported engines: {supported}.'
+
+        assert engine != 'faiss' or is_power_of_two(n_fine_centroids), 'FAISS supports only power-of-two values for n_fine_centroids.'
+
         self.l1_centroids = None
         self.l2_centroids = None
-        self.db = None
         self.permutation_length = None
+
+        self.engine = engine
 
         if isinstance(d_or_index, int):
             self.d = d_or_index
             self.c = n_coarse_centroids
             self.m = n_subvectors
-            self.f_log2 = n_fine_centroids_log2
-            self.f = 2 ** self.f_log2
-
-            index_factory_string = f'IVF{self.c},PQ{self.m}x{self.f_log2}'
-            self.faiss_index = faiss.index_factory(self.d, index_factory_string)
+            self.f = n_fine_centroids
         else:
             self.faiss_index = d_or_index
             self.d = d_or_index.d
             self.c = d_or_index.nlist
             self.m = d_or_index.pq.M
-            self.f_log2 = int(math.log2(d_or_index.pq.ksub))
             self.f = d_or_index.pq.ksub
-        
-        self._load_centroids()
+            self._load_faiss_centroids(d_or_index)
+
         vocab_size = self.c * self.m * self.f
         super().__init__(vocab_size, parallel)
 
-    def _load_centroids(self):
-        if self.faiss_index.is_trained:
-            index = self.faiss_index
+    def _load_faiss_centroids(self, index):
+        if index.is_trained:
             # get the level-1 centroids by reconstructing codes 0, ..., C-1
             self.l1_centroids = index.quantizer.reconstruct_n(0, index.nlist)
             # get the level-2 centroids and reshape them
@@ -139,17 +206,28 @@ class SPQR(SurrogateTextIndex):
             # there are ksub centroids of length dsub for each of the M subvectors
             self.l2_centroids = self.l2_centroids.reshape(index.pq.M, index.pq.ksub, index.pq.dsub)
 
+    @property
+    def is_trained(self):
+        """ Whether the index is trained. """
+        return self.l1_centroids is not None # and self.l2_centroids is not None
+
     def train(self, x):
-        self.faiss_index.do_polysemous_training = False
-        self.faiss_index.train(x)
-        self._load_centroids()
+        if self.engine == 'faiss':
+            f_log2 = int(math.log2(self.f))
+            index_factory_string = f'IVF{self.c},PQ{self.m}x{f_log2}'
+            faiss_index = faiss.index_factory(self.d, index_factory_string)
+            faiss_index.do_polysemous_training = False
+            faiss_index.train(x)
+            self._load_faiss_centroids(faiss_index)
+        elif self.engine == 'sklearn':
+            self.l1_centroids, self.l2_centroids = _spqr_train_sklearn(x, self.c, self.m, self.f)
     
     def encode(self, x, inverted=True):
         """ Encodes vectors and returns their SPQR representations.
         Args:
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
         """
-        assert self.faiss_index.is_trained, "Index must be trained before encoding."
+        assert self.is_trained, "Index must be trained before encoding."
         assert self.d == x.shape[1], f"Dimension mismatch: expected {self.d}, got {x.shape[1]}"
 
         k = self.f if self.permutation_length is None else self.permutation_length
