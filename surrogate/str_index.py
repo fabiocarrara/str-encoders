@@ -82,7 +82,8 @@ class SurrogateTextIndex(ABC):
         self._to_commit.append(x_enc)
     
     def commit(self):
-        self.db = _csr_hstack([self.db] + self._to_commit)
+        # self.db = _csr_hstack([self.db] + self._to_commit)
+        self.db = sparse.hstack([self.db] + self._to_commit).tocsr()
         self._to_commit.clear()
     
     @property
@@ -102,14 +103,14 @@ class SurrogateTextIndex(ABC):
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
             inverted (bool): if True, returns the (V,N)-shaped inverted representation
         Returns:
-            x_enc (sparse.csr_matrix): the encoded vectors
+            x_enc (spmatrix): the encoded vectors
         """
         raise NotImplementedError
 
     def reset(self):
         """ Clears the index removing stored vectors. Values of learned parameters are kept. """
         del self.db
-        self.db = sparse.csr_matrix((self.vocab_size, 0), dtype='int')
+        self.db = sparse.coo_matrix((self.vocab_size, 0), dtype='int')
 
     def search(self, q, k, *args, **kwargs):
         """ Performs kNN search with given queries.
@@ -125,7 +126,7 @@ class SurrogateTextIndex(ABC):
         k = self.db.shape[0] if k is None else k
         nq = q.shape[0]
 
-        q_enc = self.encode(q, *args, inverted=False, **kwargs)
+        q_enc = self.encode(q, *args, inverted=False, **kwargs).tocsr()
 
         if self.parallel:
             batch_size = int(math.ceil(nq / cpu_count()))

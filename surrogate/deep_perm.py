@@ -78,7 +78,7 @@ class DeepPermutation(SurrogateTextIndex):
             results = sparse.vstack(results)
             results = results.T if inverted else results
             # then convert to CSR
-            results = results.tocsr()
+            # results = results.tocsr()
             return results
         
         # non-parallel version
@@ -89,7 +89,7 @@ class DeepPermutation(SurrogateTextIndex):
         else:
             shape = (n, self.vocab_size)
 
-        return sparse.csr_matrix((data, (rows, cols)), shape=shape)
+        return sparse.coo_matrix((data, (rows, cols)), shape=shape)
     
     def train(self, x):
         """ Learn parameters from data.

@@ -84,11 +84,11 @@ class ThresholdSQ(SurrogateTextIndex):
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
         """
 
+        sparse_format = 'coo'
         transpose = inverted
 
         if self.parallel:
             batch_size = int(math.ceil(len(x) / cpu_count()))
-            sparse_format = 'coo' if inverted else 'csr'
             results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
                 delayed(_thr_sq_encode)(
                     x[i:i+batch_size],
@@ -101,13 +101,12 @@ class ThresholdSQ(SurrogateTextIndex):
                 for i in range(0, len(x), batch_size)
             )
 
-            if inverted:  # hstack COO matrices and then convert to CSR
-                return sparse.hstack(results).tocsr()
-            else:  # vstack CSR matrices
+            if inverted:
+                return sparse.hstack(results)
+            else: 
                 return sparse.vstack(results)
         
         # non-parallel version
-        sparse_format = 'csr'
         sparse_repr = _thr_sq_encode(x, self.threshold, self.sq_factor, self.rectify_negatives, self.l2_normalize, transpose, sparse_format)
         return sparse_repr
     

@@ -166,7 +166,7 @@ class SPQR(SurrogateTextIndex):
             results = sparse.vstack(results)
             results = results.T if inverted else results
             # then convert to CSR
-            results = results.tocsr()
+            # results = results.tocsr()
             return results
        
         rows, cols, data, n = _spqr_encode(x, self.l1_centroids, self.l2_centroids, k)
@@ -176,7 +176,7 @@ class SPQR(SurrogateTextIndex):
         else:
             shape = (n, self.vocab_size)
 
-        return sparse.csr_matrix((data, (rows, cols)), shape=shape)
+        return sparse.coo_matrix((data, (rows, cols)), shape=shape)
     
     @property
     def prefix_length(self):
