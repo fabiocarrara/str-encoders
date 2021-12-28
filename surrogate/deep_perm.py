@@ -2,8 +2,8 @@ import math
 import numpy as np
 from joblib import cpu_count, delayed, Parallel
 from scipy import sparse
+from sklearn.cluster import MiniBatchKMeans
 import utils
-
 from surrogate.str_index import SurrogateTextIndex
 
 
@@ -38,6 +38,7 @@ class DeepPermutation(SurrogateTextIndex):
     def __init__(
         self,
         d,
+        use_centroids=False,
         permutation_length=None,
         rectify_negatives=True,
         parallel=True
@@ -45,6 +46,10 @@ class DeepPermutation(SurrogateTextIndex):
         """ Constructor
         Args:
             d (int): the number of dimensions of the vectors to be encoded
+            use_centroids (bool): if True, computes centroids found with kmeans
+                                  and uses them as pivots to compute permutations;
+                                  if False, treat the vectors as precomputed
+                                  distances to pivots.
             permutation_length (int): the length of the permutation prefix;
                                       if None, the whole permutation is used.
                                       Defaults to None.
@@ -55,8 +60,11 @@ class DeepPermutation(SurrogateTextIndex):
         """
 
         self.d = d
+        self.use_centroids = use_centroids
         self.permutation_length = permutation_length
         self.rectify_negatives = rectify_negatives
+
+        self._kmeans = None
 
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel)
@@ -66,6 +74,9 @@ class DeepPermutation(SurrogateTextIndex):
         Args:
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
         """
+        if self.use_centroids:
+            x = - self._kmeans.transform(x)
+
         if self.parallel:
             batch_size = int(math.ceil(len(x) / cpu_count()))
             results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
@@ -96,5 +107,6 @@ class DeepPermutation(SurrogateTextIndex):
         Args:
             x (ndarray): a (N,D)-shaped matrix of training vectors.
         """
-        pass  # there are no params to learn
+        if self.use_centroids:
+            self._kmeans = MiniBatchKMeans(n_clusters=self.d, batch_size=256*cpu_count(), compute_labels=False).fit(x)
         
