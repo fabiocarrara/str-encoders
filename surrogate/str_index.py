@@ -97,11 +97,12 @@ class SurrogateTextIndex(ABC):
         return bool(self._to_commit)
 
     @abstractmethod
-    def encode(self, x, inverted=True):
+    def encode(self, x, inverted=True, query=False):
         """ Encodes vectors and returns their term-frequency representations.
         Args:
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
-            inverted (bool): if True, returns the (V,N)-shaped inverted representation
+            inverted (bool): if True, returns the (V,N)-shaped inverted representation.
+            query (bool): indicates wheather queries are to be encoded.
         Returns:
             x_enc (spmatrix): the encoded vectors
         """
