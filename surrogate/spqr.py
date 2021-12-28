@@ -7,7 +7,7 @@ from joblib import cpu_count, delayed, Parallel
 import numpy as np
 from scipy import sparse
 from scipy.spatial.distance import cdist
-from sklearn.cluster import KMeans, MiniBatchKMeans
+from sklearn.cluster import MiniBatchKMeans
 
 from surrogate.str_index import SurrogateTextIndex
 import utils
@@ -67,14 +67,21 @@ def _spqr_encode(
     l1_centroids,  # coarse centroids
     l2_centroids,  # fine centroids
     k,             # permutation prefix length
+    nprobe,        # how many coarse centroids to consider
 ):
-    n = len(x)
+    n, d = x.shape
     m, f, _ = l2_centroids.shape
 
     # find nearest coarse centroids
-    coarse_codes = cdist(x, l1_centroids, metric='sqeuclidean').argmin(axis=1) # n 
+    l1_centroid_distances = cdist(x, l1_centroids, metric='sqeuclidean')
+    coarse_codes = utils.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
 
-    # compute residual
+    # repeat x for nprobe times (1st nprobe times, then 2nd nprobe times, etc.; enables batching)
+    x = np.broadcast_to(x.reshape(n, 1, d), (n, nprobe, d)).reshape(n * nprobe, d)  # n * nprobe, d
+    coarse_codes = coarse_codes.flatten() # n * nprobe
+    n *= nprobe
+
+    # compute residuals
     residuals = x - l1_centroids[coarse_codes]  # n x d
     residuals = np.split(residuals, m, axis=1)  # m x n x d/m
 
@@ -178,6 +185,7 @@ class SPQR(SurrogateTextIndex):
         self.l1_centroids = None
         self.l2_centroids = None
         self.permutation_length = None
+        self.nprobe = 1
 
         self.engine = engine
 
@@ -235,7 +243,7 @@ class SPQR(SurrogateTextIndex):
         if self.parallel:
             batch_size = int(math.ceil(len(x) / cpu_count()))
             results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
-                delayed(_spqr_encode)(x[i:i+batch_size], self.l1_centroids, self.l2_centroids, k)
+                delayed(_spqr_encode)(x[i:i+batch_size], self.l1_centroids, self.l2_centroids, k, self.nprobe)
                 for i in range(0, len(x), batch_size)
             )
 
@@ -247,7 +255,7 @@ class SPQR(SurrogateTextIndex):
             # results = results.tocsr()
             return results
        
-        rows, cols, data, n = _spqr_encode(x, self.l1_centroids, self.l2_centroids, k)
+        rows, cols, data, n = _spqr_encode(x, self.l1_centroids, self.l2_centroids, k, self.nprobe)
         if inverted:
             rows, cols = cols, rows
             shape = (self.vocab_size, n)
@@ -271,3 +279,23 @@ class SPQR(SurrogateTextIndex):
             raise ValueError('Cannot change prefix_length of a populated index. Reset the index first.')
         
         self.permutation_length = l
+    
+    def search(self, q, k, *args, **kwargs):
+        sorted_scores, indices = super().search(q, k, *args, **kwargs)
+
+        if self.nprobe > 1:  # merge results
+            nq = len(q)
+
+            sorted_scores = sorted_scores.reshape(nq, -1)
+            indices = indices.reshape(nq, -1)
+
+            idx = utils.topk_sorted(sorted_scores, k, axis=1)
+            sorted_scores = np.take_along_axis(sorted_scores, idx, axis=1)
+            indices = np.take_along_axis(indices, idx, axis=1)
+
+        return sorted_scores, indices
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        if not hasattr(self, 'nprobe'):
+            self.nprobe = 1
