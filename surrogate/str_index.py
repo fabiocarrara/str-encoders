@@ -123,10 +123,22 @@ class SurrogateTextIndex(ABC):
             ndarray: a (N,D)-shaped matrix of sorted scores.
             ndarray: a (N,D)-shaped matrix of kNN indices.
         """
-        k = self.db.shape[0] if k is None else k
-        nq = q.shape[0]
+        q_enc = self.encode(q, *args, inverted=False, query=True, **kwargs).tocsr()
+        return self.search_encoded(q_enc, k, *args, **kwargs)
+    
+    def search_encoded(self, q_enc, k, *args, **kwargs):
+        """ Performs kNN search with given already encoded queries.
+        Args:
+            q_env (sparse.csr_matrix): a (N,V)-shaped sparse matrix of encoded query vectors.
+            k (int): the number of nearest neighbors to return.
+            args, kwargs: additional arguments for the encode() method.
 
-        q_enc = self.encode(q, *args, inverted=False, **kwargs).tocsr()
+        Returns:
+            ndarray: a (N,D)-shaped matrix of sorted scores.
+            ndarray: a (N,D)-shaped matrix of kNN indices.
+        """
+        k = self.db.shape[0] if k is None else k
+        nq = q_enc.shape[0]
 
         if self.parallel:
             batch_size = int(math.ceil(nq / cpu_count()))
