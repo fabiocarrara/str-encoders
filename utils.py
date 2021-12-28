@@ -35,7 +35,7 @@ def download_file(url: str, fname: str):
 
 
 def nice_logspace(max_n):
-    """ Returns log-spaces values like this: 1, 2, 5, 10, 20, 50, ... """
+    """ Returns log-spaces values like this: 1, 2, 5, 10, 25, 50, ... """
     def _inf_gen():
         yield from (1, 2, 5)
         i = 1
