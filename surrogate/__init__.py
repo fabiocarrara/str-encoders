@@ -2,6 +2,7 @@ import argparse
 
 from .deep_perm import DeepPermutation
 from .thr_sq import ThresholdSQ
+from .topk_sq import TopKSQ
 from .ivf_thr_sq import IVFThresholdSQ
 from .ivf_topk_sq import IVFTopKSQ
 from .spqr import SPQR
@@ -14,6 +15,8 @@ def index_factory(d, index_type, index_params):
         return ThresholdSQ(d, **index_params)
     if index_type == 'ivf-thr-sq':
         return IVFThresholdSQ(d, **index_params)
+    if index_type == 'topk-sq':
+        return TopKSQ(d, **index_params)
     if index_type == 'ivf-topk-sq':
         return IVFTopKSQ(d, **index_params)
     if index_type == 'spqr':
@@ -46,6 +49,12 @@ def argparser():
     ivfthrsq_parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
     ivfthrsq_parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
     ivfthrsq_parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
+
+    topksq_parser = subparsers.add_parser('topk-sq', help='TopK Scalar Quantization STR Index')
+    topksq_parser.add_argument('-k', '--keep', type=float, default=0.25, help='Controls how many values are discarded when encoding. Must be between 0.0 and 1.0 inclusive.')
+    topksq_parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
+    topksq_parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+    topksq_parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
 
     ivftopksq_parser = subparsers.add_parser('ivf-topk-sq', help='Chunked TopK Scalar Quantization STR Index')
     ivftopksq_parser.add_argument('-c', '--n-coarse-centroids', type=int, default=None, help='no of coarse centroids')
