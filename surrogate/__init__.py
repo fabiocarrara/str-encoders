@@ -3,6 +3,7 @@ import argparse
 from .deep_perm import DeepPermutation
 from .thr_sq import ThresholdSQ
 from .topk_sq import TopKSQ
+from .ivf_deep_perm import IVFDeepPermutation
 from .ivf_thr_sq import IVFThresholdSQ
 from .ivf_topk_sq import IVFTopKSQ
 from .spqr import SPQR
@@ -11,6 +12,8 @@ from .spqr import SPQR
 def index_factory(d, index_type, index_params):
     if index_type == 'deep-perm':
         return DeepPermutation(d, **index_params)
+    if index_type == 'ivf-deep-perm':
+        return IVFDeepPermutation(d, **index_params)
     if index_type == 'thr-sq':
         return ThresholdSQ(d, **index_params)
     if index_type == 'ivf-thr-sq':
@@ -35,6 +38,12 @@ def argparser():
     deep_perm_parser.add_argument('-c', '--use-centroids', action='store_true', default=False, help='Find Pivots with k-Means.')
     deep_perm_parser.add_argument('-L', '--permutation-length', type=int, default=None, help='length of the permutation prefix (None for full permutation)')
     deep_perm_parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+
+    ivf_deep_perm_parser = subparsers.add_parser('ivf-deep-perm', help='Chunked Deep Permutation STR Index')
+    ivf_deep_perm_parser.add_argument('-c', '--n-coarse-centroids', type=int, default=None, help='no of coarse centroids')
+    ivf_deep_perm_parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+    ivf_deep_perm_parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
+    ivf_deep_perm_parser.add_argument('-L', '--permutation-length', type=int, default=None, help='length of the permutation prefix (None for full permutation)')
 
     thrsq_parser = subparsers.add_parser('thr-sq', help='Threshold Scalar Quantization STR Index')
     thrsq_parser.add_argument('-Q', '--threshold-percentile', type=int, default=75, help='Controls how many values are discarded when encoding. Must be between 1 and 99 inclusive.')
