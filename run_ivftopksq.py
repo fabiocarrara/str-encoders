@@ -19,6 +19,21 @@ from surrogate import IVFTopKSQ
 from utils import get_ann_benchmark, nice_logspace, compute_recalls
 
 
+import pickle
+
+class RenameUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        renamed_module = module
+        if module == "surrogate.ivf_sq":
+            renamed_module = "surrogate.ivf_topk_sq"
+
+        return super(RenameUnpickler, self).find_class(renamed_module, name)
+
+
+def renamed_load(file_obj):
+    return RenameUnpickler(file_obj).load()
+
+
 def load_or_train_index(d, x, C, M, K, S, R, N, trained_index_path, train_time_path):
     if not Path(trained_index_path).exists() or args.force:
         # train common index
@@ -39,7 +54,8 @@ def load_or_train_index(d, x, C, M, K, S, R, N, trained_index_path, train_time_p
     else:
         logging.info(f'Reading pretrained index from: {trained_index_path}')
         with open(trained_index_path, 'rb') as f:
-            index = pickle.load(f)
+            index = renamed_load(f)
+            # index = pickle.load(f)
             # index.parallel = True
 
         with open(train_time_path, 'r') as f:
@@ -72,7 +88,8 @@ def load_or_build_index(index, x, index_batch_size, force, built_index_path, bui
     else:
         logging.info(f'Reading prebuilt index from: {built_index_path}')
         with open(built_index_path, 'rb') as f:
-            index = pickle.load(f)
+            # index = pickle.load(f)
+            index = renamed_load(f)
 
         with open(build_time_path, 'r') as f:
             build_time = float(f.read().strip())
