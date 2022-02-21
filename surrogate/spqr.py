@@ -2,7 +2,6 @@ import functools
 import logging
 import math
 
-import faiss
 from joblib import cpu_count, delayed, Parallel
 import numpy as np
 from scipy import sparse
@@ -206,6 +205,7 @@ class SPQR(SurrogateTextIndex):
         super().__init__(vocab_size, parallel)
 
     def _load_faiss_centroids(self, index):
+        import faiss
         if index.is_trained:
             # get the level-1 centroids by reconstructing codes 0, ..., C-1
             self.l1_centroids = index.quantizer.reconstruct_n(0, index.nlist)
@@ -221,6 +221,7 @@ class SPQR(SurrogateTextIndex):
 
     def train(self, x):
         if self.engine == 'faiss':
+            import faiss
             f_log2 = int(math.log2(self.f))
             index_factory_string = f'IVF{self.c},PQ{self.m}x{f_log2}'
             faiss_index = faiss.index_factory(self.d, index_factory_string)
