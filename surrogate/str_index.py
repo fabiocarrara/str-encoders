@@ -157,6 +157,13 @@ class SurrogateTextIndex(ABC):
 
         return sorted_scores, indices
     
+    def search_cost(self, q, *args, **kwargs):
+        assert not self.dirty, "Search cost can be computed only on committed indices."
+        q_enc = self.encode(q, *args, inverted=True, query=True, **kwargs).tocsr()
+        q_nnz = np.diff(q_enc.indptr)
+        x_nnz = np.diff(self.db.indptr)
+        return np.dot(q_nnz, x_nnz)
+    
     @abstractmethod
     def train(self, x):
         """ Learn parameters from data.
