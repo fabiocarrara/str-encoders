@@ -4,7 +4,7 @@ FROM ubuntu:20.04
 RUN apt update && DEBIAN_FRONTEND=noninteractive apt install -y \
     build-essential \
     git \
-    intel-mkl \
+    libopenblas-dev \
     libomp-dev \
     python3-dev \
     python3-pip \
