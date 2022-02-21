@@ -81,7 +81,7 @@ def load_or_build_index(index, x, index_batch_size, force, built_index_path, bui
 
 # @tqdm_logging
 def main(args):
-    ignore = ('data_root', 'exp_root', 'force', 'index_batch_size', 'search_batch_size')
+    ignore = ('data_root', 'exp_root', 'force', 'index_batch_size', 'search_batch_size', 'search_timeout')
     exp = Experiment(args, root=args.exp_root, ignore=ignore)
     print(exp)
 
@@ -140,7 +140,7 @@ def main(args):
                         logging.info(f'SKIPPING IVFTHRSQ C={C} M={M} Q={Q} S={S} R={R} N={N} nprobe={nprobe}')
                         continue
 
-            if search_time > 5 * 60:  # 5 min
+            if search_time > args.search_timeout:
                 logging.info(f'Skipping nprobes >= {nprobe}, search() would take too long (> 5min).')
                 break
             
@@ -214,5 +214,7 @@ if __name__ == "__main__":
     parser.add_argument('--force', default=False, action='store_true', help='force index training')
     parser.add_argument('-b', '--index-batch-size', type=int, default=None, help='index data in batches with this size')
     parser.add_argument('-B', '--search-batch-size', type=int, default=None, help='search data in batches with this size')
+    parser.add_argument('-t', '--search-timeout', type=int, default=1000, help='stop parameter search when search time (in seconds) is over this value')
+    
     args = parser.parse_args()
     main(args)

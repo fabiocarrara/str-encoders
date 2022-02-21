@@ -39,7 +39,7 @@ def argparser():
     thrsq_parser = subparsers.add_parser('thr-sq', help='Threshold Scalar Quantization STR Index')
     thrsq_parser.add_argument('-Q', '--threshold-percentile', type=int, default=75, help='Controls how many values are discarded when encoding. Must be between 1 and 99 inclusive.')
     thrsq_parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
-    thrsq_parser.add_argument('-c', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+    thrsq_parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
     thrsq_parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
 
     ivfthrsq_parser = subparsers.add_parser('ivf-thr-sq', help='Residual Chunked Threshold Scalar Quantization STR Index')
