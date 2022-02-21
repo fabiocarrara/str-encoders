@@ -104,8 +104,9 @@ def topk_sorted(x, k, axis=0):
 
 class Timer:
 
-    def __init__(self, desc=None):
+    def __init__(self, desc=None, fmt='g'):
         self.desc = desc
+        self.fmt = fmt
 
     def __enter__(self):
         self.start = time.time()
@@ -114,4 +115,4 @@ class Timer:
         self.stop = time.time()
         self.duration = self.stop - self.start
         prefix = (self.desc + ': ') if self.desc else ''
-        print(f"{prefix}{self.duration} s")
+        print(f"{prefix}{self.duration:{self.fmt}} s")
