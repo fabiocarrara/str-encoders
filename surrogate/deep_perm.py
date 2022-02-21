@@ -39,7 +39,6 @@ class DeepPermutation(SurrogateTextIndex):
         self,
         d,
         use_centroids=False,
-        permutation_length=None,
         rectify_negatives=True,
         parallel=True
     ):
@@ -50,18 +49,19 @@ class DeepPermutation(SurrogateTextIndex):
                                   and uses them as pivots to compute permutations;
                                   if False, treat the vectors as precomputed
                                   distances to pivots.
-            permutation_length (int): the length of the permutation prefix;
-                                      if None, the whole permutation is used.
-                                      Defaults to None.
             rectify_negatives (bool): whether to reserve d additional dimensions
                                       to encode negative values separately 
                                       (a.k.a. apply CReLU transform).
                                       Defaults to True.
+        Attributes:
+            permutation_length (int): the length of the permutation prefix;
+                                      if None, the whole permutation is used.
+                                      Defaults to None.
         """
 
         self.d = d
         self.use_centroids = use_centroids
-        self.permutation_length = permutation_length
+        self.permutation_length = None
         self.rectify_negatives = rectify_negatives
 
         self._kmeans = None
@@ -69,7 +69,7 @@ class DeepPermutation(SurrogateTextIndex):
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel)
 
-    def encode(self, x, inverted=True):
+    def encode(self, x, inverted=True, **kwargs):
         """ Encodes vectors and returns their term-frequency representations.
         Args:
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.

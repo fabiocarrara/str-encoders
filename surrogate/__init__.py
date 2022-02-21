@@ -29,8 +29,9 @@ def argparser():
     subparsers = parser.add_subparsers(dest='index_type')
 
     deep_perm_parser = subparsers.add_parser('deep-perm', help='Deep Permutation STR Index')
+    deep_perm_parser.add_argument('-c', '--use-centroids', action='store_true', default=False, help='Find Pivots with k-Means.')
     deep_perm_parser.add_argument('-L', '--permutation-length', type=int, default=None, help='length of the permutation prefix (None for full permutation)')
-    deep_perm_parser.add_argument('-c', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+    deep_perm_parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
 
     thrsq_parser = subparsers.add_parser('thr-sq', help='Threshold Scalar Quantization STR Index')
     thrsq_parser.add_argument('-Q', '--threshold-percentile', type=int, default=75, help='Controls how many values are discarded when encoding. Must be between 1 and 99 inclusive.')
