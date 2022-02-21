@@ -81,7 +81,7 @@ def load_or_build_index(index, x, index_batch_size, force, built_index_path, bui
 
 # @tqdm_logging
 def main(args):
-    ignore = ('data_root', 'exp_root', 'force', 'index_batch_size', 'search_batch_size')
+    ignore = ('data_root', 'exp_root', 'force', 'index_batch_size', 'search_batch_size', 'search_timeout')
     exp = Experiment(args, root=args.exp_root, ignore=ignore)
     print(exp)
 
@@ -140,8 +140,8 @@ def main(args):
                         logging.info(f'SKIPPING IVFTopKSQ C={C} M={M} K={K} S={S} R={R} N={N} nprobe={nprobe}')
                         continue
 
-            if search_time > 5 * 60:  # 5 min
-                logging.info(f'Skipping nprobes >= {nprobe}, search() would take too long (> 5min).')
+            if search_time > args.search_timeout:
+                logging.info(f'Skipping nprobes >= {nprobe}, search() would take too long (> {args.search_timeout} s).')
                 break
             
             index.nprobe = nprobe
@@ -150,7 +150,6 @@ def main(args):
             batch_size = len(q) if args.search_batch_size is None else args.search_batch_size
             batch_size = math.ceil(batch_size / nprobe)
 
-            logging.info(f'Searching index ...')
             search_time = time.time()
             nns = []
             for i in trange(0, len(q), batch_size, desc='SEARCH'):
@@ -158,7 +157,6 @@ def main(args):
                 nns.append(nns_batch)
             nns = np.vstack(nns)
             search_time = time.time() - search_time
-            logging.info(f'Done in {search_time} s.')
 
             recalls = {k: compute_recalls(true_neighbors[:, :k], nns[:, :k]).mean() for k in nice_logspace(lim)}
 
@@ -177,7 +175,7 @@ def main(args):
             metrics.to_csv(metrics_path, index=False)
 
             k = 100
-            logging.info(f'IVFTopKSQ C={C} M={M} K={K} S={S} R={R} N={N} nprobe={nprobe}: R@{k}={recalls[k]:.3f}')
+            logging.info(f'IVFTopKSQ C={C} M={M} K={K} S={S} R={R} N={N} nprobe={nprobe}: R@{k}={recalls[k]:.3f} search-time: {search_time:2.2f} s')
 
     logging.info('done')
     return
@@ -214,5 +212,7 @@ if __name__ == "__main__":
     parser.add_argument('--force', default=False, action='store_true', help='force index training')
     parser.add_argument('-b', '--index-batch-size', type=int, default=None, help='index data in batches with this size')
     parser.add_argument('-B', '--search-batch-size', type=int, default=None, help='search data in batches with this size')
+    parser.add_argument('-t', '--search-timeout', type=int, default=1000, help='stop parameter search when search time (in seconds) is over this value')
+
     args = parser.parse_args()
     main(args)
