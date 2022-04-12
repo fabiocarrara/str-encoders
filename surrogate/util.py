@@ -34,3 +34,18 @@ def topk_sorted(x, k, axis=0):
         ndarray: (N,K)-shaped array of indices.
     """
     return bottomk_sorted(-x, k, axis=axis)
+
+
+def generate_documents(x_enc, compact=True, delimiter='|'):
+    x_enc = x_enc.tocsr()
+    n_docs = x_enc.shape[0]
+
+    for i in range(n_docs):
+        xi_enc = x_enc.getrow(i)
+        if compact:
+            doc = [f'{term}{delimiter}{frequency}' for term, frequency in zip(xi_enc.indices, xi_enc.data)]
+        else:
+            doc = [[str(term)] * frequency for term, frequency in zip(xi_enc.indices, xi_enc.data)]
+            doc = itertools.chain.from_iterable(doc)
+        doc = ' '.join(doc)
+        yield doc

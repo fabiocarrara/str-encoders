@@ -8,6 +8,9 @@ from .ivf_thr_sq import IVFThresholdSQ
 from .ivf_topk_sq import IVFTopKSQ
 from .spqr import SPQR
 
+from .io import load_index, save_index
+from .util import generate_documents
+
 
 def index_factory(d, index_type, index_params):
     if index_type == 'deep-perm':
