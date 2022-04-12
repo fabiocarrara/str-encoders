@@ -42,4 +42,21 @@ with open('docs.txt', 'w') as f:
     for doc in x_docs:
         f.write(doc)
         f.write('\n')
+
+# -------------------------------
+
+# query encoding
+q = np.random.rand(1, d)
+
+# set how many voronoi partitions to access at query time
+enc.nprobe = 15
+
+# encode query (use query=True)
+q_enc = enc.encode(q, inverted=False, query=True)
+
+# generate surrogate document
+q_docs = surrogate.generate_documents(q_enc)
+
+# print the document
+print(next(q_docs))
 ```
