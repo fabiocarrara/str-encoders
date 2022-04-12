@@ -8,8 +8,9 @@ from scipy import sparse
 from scipy.spatial.distance import cdist
 from sklearn.cluster import MiniBatchKMeans
 
-from surrogate.str_index import SurrogateTextIndex
-import utils
+from . import util
+from .str_index import SurrogateTextIndex
+
 
 def _spqr_train_sklearn(
     x,                            # vectors to train from
@@ -73,7 +74,7 @@ def _spqr_encode(
 
     # find nearest coarse centroids
     l1_centroid_distances = cdist(x, l1_centroids, metric='sqeuclidean')
-    coarse_codes = utils.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
+    coarse_codes = util.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
 
     # repeat x for nprobe times (1st nprobe times, then 2nd nprobe times, etc.; enables batching)
     x = np.broadcast_to(x.reshape(n, 1, d), (n, nprobe, d)).reshape(n * nprobe, d)  # n * nprobe, d
@@ -91,14 +92,14 @@ def _spqr_encode(
             for r, c in zip(residuals, l2_centroids) ])  # m x n x f
 
     # find kNNs for each subvector
-    nns = utils.bottomk_sorted(fine_distances, k, axis=2)  # m x n x k
+    nns = util.bottomk_sorted(fine_distances, k, axis=2)  # m x n x k
     """
 
     # ... a subvector at a time, less memory consumption (also faster?!)
     nns = np.empty((m, n, k), dtype=int)
     for i, (sub_residuals, sub_centroids) in enumerate(zip(residuals, l2_centroids)):
         sub_fine_distances = cdist(sub_residuals, sub_centroids, metric='sqeuclidean')  # n x f
-        nns[i] = utils.bottomk_sorted(sub_fine_distances, k, axis=1)  # n x k
+        nns[i] = util.bottomk_sorted(sub_fine_distances, k, axis=1)  # n x k
 
     # build the representation
     # the nested-for-loops way ...
@@ -290,7 +291,7 @@ class SPQR(SurrogateTextIndex):
             sorted_scores = sorted_scores.reshape(nq, -1)
             indices = indices.reshape(nq, -1)
 
-            idx = utils.topk_sorted(sorted_scores, k, axis=1)
+            idx = util.topk_sorted(sorted_scores, k, axis=1)
             sorted_scores = np.take_along_axis(sorted_scores, idx, axis=1)
             indices = np.take_along_axis(indices, idx, axis=1)
 

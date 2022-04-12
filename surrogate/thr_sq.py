@@ -1,10 +1,11 @@
 import math
+
 import numpy as np
 from joblib import cpu_count, delayed, Parallel
 from scipy import sparse
 from sklearn.preprocessing import normalize
 
-from surrogate.str_index import SurrogateTextIndex
+from .str_index import SurrogateTextIndex
 
 
 def _thr_sq_encode(

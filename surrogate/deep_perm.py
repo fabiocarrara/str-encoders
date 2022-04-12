@@ -1,10 +1,12 @@
 import math
+
 import numpy as np
 from joblib import cpu_count, delayed, Parallel
 from scipy import sparse
 from sklearn.cluster import MiniBatchKMeans
-import utils
-from surrogate.str_index import SurrogateTextIndex
+
+from . import util
+from .str_index import SurrogateTextIndex
 
 
 def _deep_perm_encode(
@@ -18,7 +20,7 @@ def _deep_perm_encode(
     n, d = x.shape
 
     k = d if permutation_length is None else permutation_length
-    topk = utils.topk_sorted(x, k, axis=1)  # n x k
+    topk = util.topk_sorted(x, k, axis=1)  # n x k
 
     rows = np.arange(n).reshape(-1, 1)
     cols = topk

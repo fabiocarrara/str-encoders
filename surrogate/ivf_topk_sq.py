@@ -8,8 +8,8 @@ from scipy.spatial.distance import cdist
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.preprocessing import normalize
 
-import utils
-from surrogate.str_index import SurrogateTextIndex
+from . import util
+from .str_index import SurrogateTextIndex
 
 
 def _ivf_topk_sq_encode(
@@ -32,7 +32,7 @@ def _ivf_topk_sq_encode(
         x = normalize(x)
     
     l1_centroid_distances = cdist(x, centroids, metric='sqeuclidean')
-    coarse_codes = utils.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
+    coarse_codes = util.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
 
     dsub = d // m
     x = x.reshape(n, m, dsub)  # n x m x d/m
@@ -43,7 +43,7 @@ def _ivf_topk_sq_encode(
     # keep the topk components per subvector
     k = int(k * dsub) if isinstance(k, float) else k
 
-    cols = utils.topk_sorted(xx, k, axis=2)  # n x m x k
+    cols = util.topk_sorted(xx, k, axis=2)  # n x m x k
     cols += np.arange(m).reshape(1, m, 1) * dsub  # shift indices to the right subvector
     cols = cols.reshape(n, -1)  # n x (m*k)
 

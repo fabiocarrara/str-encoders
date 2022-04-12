@@ -8,8 +8,8 @@ from scipy.spatial.distance import cdist
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.preprocessing import normalize
 
-import utils
-from surrogate.str_index import SurrogateTextIndex
+from . import util
+from .str_index import SurrogateTextIndex
 
 
 def _ivf_thr_sq_encode(
@@ -33,7 +33,7 @@ def _ivf_thr_sq_encode(
         x = normalize(x)
     
     l1_centroid_distances = cdist(x, centroids, metric='sqeuclidean')
-    coarse_codes = utils.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
+    coarse_codes = util.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
 
     if query:  # compute norms for later
         x_norm = np.linalg.norm(x, axis=1) if not l2_normalize else np.ones(n)
@@ -274,7 +274,7 @@ class IVFThresholdSQ(SurrogateTextIndex):
             sorted_scores = sorted_scores.reshape(nq, -1)
             indices = indices.reshape(nq, -1)
 
-            idx = utils.topk_sorted(sorted_scores, k, axis=1)
+            idx = util.topk_sorted(sorted_scores, k, axis=1)
             sorted_scores = np.take_along_axis(sorted_scores, idx, axis=1)
             indices = np.take_along_axis(indices, idx, axis=1)
 

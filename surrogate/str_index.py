@@ -5,7 +5,7 @@ import numpy as np
 from joblib import cpu_count, delayed, Parallel
 from scipy import sparse
 
-import utils
+from . import util
 
 
 def _csr_hstack(blocks):
@@ -51,7 +51,7 @@ def _search(
         if query_scores.nnz == 0:
             continue
         
-        query_neighbors = utils.topk_sorted(query_scores.data, k)
+        query_neighbors = util.topk_sorted(query_scores.data, k)
         indices[query_idx, :len(query_neighbors)] = query_scores.indices[query_neighbors]
         sorted_scores[query_idx, :len(query_neighbors)] = query_scores.data[query_neighbors]
     

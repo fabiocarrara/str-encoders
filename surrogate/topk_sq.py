@@ -5,8 +5,8 @@ from joblib import cpu_count, delayed, Parallel
 from scipy import sparse
 from sklearn.preprocessing import normalize
 
-import utils
-from surrogate.str_index import SurrogateTextIndex
+from . import util
+from .str_index import SurrogateTextIndex
 
 
 def _topk_sq_encode(
@@ -28,7 +28,7 @@ def _topk_sq_encode(
     xx = np.fabs(x) if rectify_negatives else x
 
     rows = np.arange(n).reshape(n, 1)  # n x 1
-    cols = utils.topk_sorted(xx, k, axis=1)  # n x k
+    cols = util.topk_sorted(xx, k, axis=1)  # n x k
     data = xx[rows, cols]  # n x k
     
     if rectify_negatives:

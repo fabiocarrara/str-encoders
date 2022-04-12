@@ -1,5 +1,6 @@
 import logging
 import math
+
 import numpy as np
 from joblib import cpu_count, delayed, Parallel
 from scipy import sparse
@@ -7,8 +8,8 @@ from scipy.spatial.distance import cdist
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.preprocessing import normalize
 
-import utils
-from surrogate.str_index import SurrogateTextIndex
+from . import util
+from .str_index import SurrogateTextIndex
 
 
 def _ivf_deep_perm_encode(
@@ -30,14 +31,14 @@ def _ivf_deep_perm_encode(
         x = normalize(x)
     
     l1_centroid_distances = cdist(x, centroids, metric='sqeuclidean')
-    coarse_codes = utils.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
+    coarse_codes = util.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
 
     mult = 2 if rectify_negatives else 1
     xx = np.fabs(x) if rectify_negatives else x
 
     k = d if permutation_length is None else permutation_length
 
-    cols = utils.topk_sorted(xx, k, axis=1)  # n x k
+    cols = util.topk_sorted(xx, k, axis=1)  # n x k
     rows = np.arange(n).reshape(n, 1)  # n x 1
 
     is_positive = x[rows, cols] >= 0  # n x k
