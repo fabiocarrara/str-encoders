@@ -87,9 +87,9 @@ class IVFTopKSQ(SurrogateTextIndex):
         self,
         d,
         n_coarse_centroids=None,
-        n_subvectors=None,
-        k=0.25,
-        sq_factor=1000,
+        n_subvectors=1,
+        k=0.75,
+        sq_factor=1e5,
         rectify_negatives=True,
         l2_normalize=True,
         parallel=True
