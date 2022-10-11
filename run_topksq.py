@@ -188,7 +188,7 @@ ANN_DATASETS = (
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run TopKSQ Experiments')
-    parser.add_argument('dataset', choices=ANN_DATASETS, help='dataset from ann-benchmarks.com')
+    parser.add_argument('dataset', help='dataset from ann-benchmarks.com')
 
     parser.add_argument('-k', '--keep', type=float, default=0.25, help='Controls how many values are discarded when encoding. Must be between 0.0 and 1.0 inclusive.')
     parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')

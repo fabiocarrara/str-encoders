@@ -214,8 +214,8 @@ ANN_DATASETS = (
 )
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Run IVFTHRSQ Experiments')
-    parser.add_argument('dataset', choices=ANN_DATASETS, help='dataset from ann-benchmarks.com')
+    parser = argparse.ArgumentParser(description='Run IVFTOPKSQ Experiments')
+    parser.add_argument('dataset', help='dataset from ann-benchmarks.com')
     parser.add_argument('-c', '--n-coarse-centroids', type=int, default=None, help='no of coarse centroids')
     parser.add_argument('-m', '--n-subvectors', type=int, default=None, help='no of subvectors for PQ')
     parser.add_argument('-K', '--keep', type=float, default=0.75, help='Controls how many values are kept when encoding. Must be between 0.0 and 1.0 inclusive.')
