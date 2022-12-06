@@ -59,7 +59,7 @@ class TopKSQ(SurrogateTextIndex):
     def __init__(
         self,
         d,
-        k=0.25,
+        keep=0.25,
         sq_factor=1000,
         rectify_negatives=True,
         l2_normalize=True,
@@ -68,9 +68,9 @@ class TopKSQ(SurrogateTextIndex):
         """ Constructor
         Args:
             d (int): the number of dimensions of the vectors to be encoded.
-            k (int or float): if int, number of components to keep (must be between 0 and d);
-                              if float, the fraction of components to keep (must
-                              be between 0.0 and 1.0). Defaults to 0.25.
+            keep (int or float): if int, number of components to keep (must be between 0 and d);
+                                 if float, the fraction of components to keep (must
+                                 be between 0.0 and 1.0). Defaults to 0.25.
             sq_factor (float): multiplicative factor controlling scalar quantization.
                                Defaults to 1000.
             rectify_negatives (bool): whether to reserve d additional dimensions
@@ -83,7 +83,7 @@ class TopKSQ(SurrogateTextIndex):
         """
 
         self.d = d
-        self.k = k
+        self.keep = keep
         self.sq_factor = sq_factor
         self.rectify_negatives = rectify_negatives
         self.l2_normalize = l2_normalize
@@ -104,7 +104,7 @@ class TopKSQ(SurrogateTextIndex):
             results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
                 delayed(_topk_sq_encode)(
                     x[i:i+batch_size],
-                    self.k,
+                    self.keep,
                     self.sq_factor,
                     self.rectify_negatives,
                     self.l2_normalize,
@@ -119,7 +119,7 @@ class TopKSQ(SurrogateTextIndex):
         # non-parallel version
         return _topk_sq_encode(
             x,
-            self.k,
+            self.keep,
             self.sq_factor,
             self.rectify_negatives,
             self.l2_normalize,

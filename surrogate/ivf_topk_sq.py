@@ -88,7 +88,7 @@ class IVFTopKSQ(SurrogateTextIndex):
         d,
         n_coarse_centroids=None,
         n_subvectors=1,
-        k=0.75,
+        keep=0.75,
         sq_factor=1e5,
         rectify_negatives=True,
         l2_normalize=True,
@@ -119,7 +119,7 @@ class IVFTopKSQ(SurrogateTextIndex):
         self.d = d
         self.c = n_coarse_centroids
         self.m = n_subvectors
-        self.k = k
+        self.keep = keep
         self.sq_factor = sq_factor
         self.rectify_negatives = rectify_negatives
         self.l2_normalize = l2_normalize
@@ -144,7 +144,7 @@ class IVFTopKSQ(SurrogateTextIndex):
                 delayed(_ivf_topk_sq_encode)(
                     x[i:i+batch_size],
                     self.m,
-                    self.k,
+                    self.keep,
                     self._centroids,
                     self.sq_factor,
                     self.rectify_negatives,
@@ -162,7 +162,7 @@ class IVFTopKSQ(SurrogateTextIndex):
         return _ivf_topk_sq_encode(
             x,
             self.m,
-            self.k,
+            self.keep,
             self._centroids,
             self.sq_factor,
             self.rectify_negatives,
