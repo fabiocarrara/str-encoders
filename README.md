@@ -20,7 +20,7 @@ x = np.random.rand(n, d)
 enc = surrogate.IVFTopKSQ(
     d,  # input dimensionality
     n_coarse_centroids=10,  # n. of voronoi partitions
-    k=0.75,  # percentage of components to keep
+    keep=0.75,  # percentage of components to keep
 )
 
 # train encoder
