@@ -9,13 +9,13 @@ from .str_index import SurrogateTextIndex
 
 
 def _thr_sq_encode(
-    x,                  # featues to encode
+    x,                  # features to encode
     threshold,          # thresholding factor
     sq_factor,          # quantization factor
     rectify_negatives,  # whether to apply crelu
     l2_normalize,       # whether to l2-normalize vectors
     rotation_matrix,    # rotation matrix used to rotate features
-    mean,
+    mean,               # mean vector computed on the whole dataset
     transpose,          # if True, transpose result (returns VxN)
     format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
@@ -77,7 +77,7 @@ class ThresholdSQ(SurrogateTextIndex):
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
             subtract_mean (bool): whether to subtract the mean from the dataset features
-            rotation_matrix (bool): rotation matrix used to rotate dataset and query features to balance dimensions
+            rotation_matrix (array): rotation matrix used to rotate dataset and query features to balance dimensions
         """
 
         self.d = d
