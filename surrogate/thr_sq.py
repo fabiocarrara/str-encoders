@@ -14,11 +14,19 @@ def _thr_sq_encode(
     sq_factor,          # quantization factor
     rectify_negatives,  # whether to apply crelu
     l2_normalize,       # whether to l2-normalize vectors
+    rotation_matrix,    # rotation matrix used to rotate features
+    mean,
     transpose,          # if True, transpose result (returns VxN)
     format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
     if l2_normalize:
         x = normalize(x)
+
+    if mean is not None:
+        x -= mean
+
+    if rotation_matrix is not None:
+        x = x.dot(rotation_matrix.T)
 
     if rectify_negatives:
         x = np.hstack([np.maximum(x, 0), - np.minimum(x, 0)])
@@ -48,6 +56,8 @@ class ThresholdSQ(SurrogateTextIndex):
         sq_factor=1000,
         rectify_negatives=True,
         l2_normalize=True,
+        subtract_mean=False,
+        rotation_matrix=None,
         parallel=True
     ):
         """ Constructor
@@ -66,6 +76,8 @@ class ThresholdSQ(SurrogateTextIndex):
             l2_normalize (bool): whether to apply l2-normalization before processing vectors;
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
+            subtract_mean (bool): whether to subtract the mean from the dataset features
+            rotation_matrix (bool): rotation matrix used to rotate dataset and query features to balance dimensions
         """
 
         self.d = d
@@ -73,13 +85,16 @@ class ThresholdSQ(SurrogateTextIndex):
         self.sq_factor = sq_factor
         self.rectify_negatives = rectify_negatives
         self.l2_normalize = l2_normalize
+        self.subtract_mean = subtract_mean
+        self.rotation_matrix = rotation_matrix
 
         self.threshold = None
+        self.mean = None
 
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel)
 
-    def encode(self, x, inverted=True, **kwargs):
+    def encode(self, x, inverted=True, query=False, **kwargs):
         """ Encodes vectors and returns their term-frequency representations.
         Args:
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
@@ -87,6 +102,7 @@ class ThresholdSQ(SurrogateTextIndex):
 
         sparse_format = 'coo'
         transpose = inverted
+        mean = self.mean if not query else None
 
         if self.parallel:
             batch_size = int(math.ceil(len(x) / cpu_count()))
@@ -97,6 +113,8 @@ class ThresholdSQ(SurrogateTextIndex):
                     self.sq_factor,
                     self.rectify_negatives,
                     self.l2_normalize,
+                    self.rotation_matrix,
+                    mean,
                     transpose,
                     sparse_format)
                 for i in range(0, len(x), batch_size)
@@ -108,7 +126,7 @@ class ThresholdSQ(SurrogateTextIndex):
                 return sparse.vstack(results)
         
         # non-parallel version
-        sparse_repr = _thr_sq_encode(x, self.threshold, self.sq_factor, self.rectify_negatives, self.l2_normalize, transpose, sparse_format)
+        sparse_repr = _thr_sq_encode(x, self.threshold, self.sq_factor, self.rectify_negatives, self.l2_normalize, self.rotation_matrix, mean, transpose, sparse_format)
         return sparse_repr
     
     def train(self, x):
@@ -121,5 +139,8 @@ class ThresholdSQ(SurrogateTextIndex):
 
         if self.rectify_negatives:
             x = np.fabs(x)
+
+        if self.subtract_mean:
+            self.mean = x.mean(axis=0)
 
         self.threshold = np.percentile(x, self.threshold_percentile)
