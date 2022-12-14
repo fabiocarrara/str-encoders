@@ -8,6 +8,26 @@ import requests
 from tqdm import tqdm
 
 
+def get_random_dataset(d, nx, nq, data_root='./data'):
+    datapath = Path(data_root)
+    datapath.mkdir(exist_ok=True)
+    datapath = datapath / f'random-{d}-dot-{nx}db-{nq}q.hdf5'
+    if not datapath.exists():
+
+        test = 2 * np.random.rand(nq, d).astype(np.float32) - 1
+        train = 2 * np.random.rand(nx, d).astype(np.float32) - 1
+        distances = test.dot(train.T)
+        neighbors = distances.argsort(axis=1)[:, ::-1].astype(np.int32)
+
+        with h5py.File(datapath, 'w') as f:
+            f.create_dataset('train', data=train)
+            f.create_dataset('test', data=test)
+            f.create_dataset('distances', data=distances)
+            f.create_dataset('neighbors', data=neighbors)
+    
+    return h5py.File(datapath, 'r')
+
+
 def get_ann_benchmark(dataset_name, data_root='./data'):
     datapath = Path(data_root)
     datapath.mkdir(exist_ok=True)
@@ -32,6 +52,14 @@ def download_file(url: str, fname: str):
         for data in resp.iter_content(chunk_size=1024):
             size = file.write(data)
             bar.update(size)
+
+
+def get_dataset(dataset_name, data_root='./data'):
+    if dataset_name.startswith('random'):
+        d, nx, nq = map(int, dataset_name.split('-')[1:])
+        return get_random_dataset(d, nx, nq, data_root=data_root)
+    
+    return get_ann_benchmark(dataset_name, data_root=data_root)
 
 
 def nice_logspace(max_n):
