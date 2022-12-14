@@ -3,6 +3,7 @@ import math
 import numpy as np
 from joblib import cpu_count, delayed, Parallel
 from scipy import sparse
+from scipy.stats import ortho_group
 from sklearn.preprocessing import normalize
 
 from .str_index import SurrogateTextIndex
@@ -87,6 +88,8 @@ class ThresholdSQ(SurrogateTextIndex):
         self.l2_normalize = l2_normalize
         self.subtract_mean = subtract_mean
         self.rotation_matrix = rotation_matrix
+        if isinstance(rotation_matrix, int):
+            self.rotation_matrix = ortho_group.rvs(d, random_state=rotation_matrix)
 
         self.threshold = None
         self.mean = None
