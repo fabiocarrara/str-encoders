@@ -113,19 +113,27 @@ class SurrogateTextIndex(ABC):
         del self.db
         self.db = sparse.coo_matrix((self.vocab_size, 0), dtype='int')
 
-    def search(self, q, k, *args, **kwargs):
+    def search(self, q, k, *args, return_cost=False, **kwargs):
         """ Performs kNN search with given queries.
         Args:
             q (ndarray): a (N,D)-shaped matrix of query vectors.
             k (int): the number of nearest neighbors to return.
+            return_cost (bool): whether to return query cost in terms of retrieved elements in the inverted index.
             args, kwargs: additional arguments for the encode() method.
 
         Returns:
             ndarray: a (N,D)-shaped matrix of sorted scores.
             ndarray: a (N,D)-shaped matrix of kNN indices.
         """
-        q_enc = self.encode(q, *args, inverted=False, query=True, **kwargs).tocsr()
-        return self.search_encoded(q_enc, k, *args, **kwargs)
+        q_enc = self.encode(q, *args, inverted=False, query=True, **kwargs)
+        results = self.search_encoded(q_enc.tocsr(), k, *args, **kwargs)
+
+        if return_cost:
+            q_enc = q_enc.T.tocsr()  # we need inverted=True
+            cost = self.search_cost_encoded(q_enc, *args, **kwargs)
+            results += (cost,)
+        
+        return results
     
     def search_encoded(self, q_enc, k, *args, **kwargs):
         """ Performs kNN search with given already encoded queries.
@@ -160,6 +168,10 @@ class SurrogateTextIndex(ABC):
     def search_cost(self, q, *args, **kwargs):
         assert not self.dirty, "Search cost can be computed only on committed indices."
         q_enc = self.encode(q, *args, inverted=True, query=True, **kwargs).tocsr()
+        return self.search_cost_encoded(q_enc, *args, **kwargs)
+    
+    def search_cost_encoded(self, q_enc, *args, **kwargs):
+        assert not self.dirty, "Search cost can be computed only on committed indices."
         q_nnz = np.diff(q_enc.indptr)
         x_nnz = np.diff(self.db.indptr)
         return np.dot(q_nnz, x_nnz)
