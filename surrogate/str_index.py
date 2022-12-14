@@ -39,13 +39,20 @@ def _csr_hstack(blocks):
 def _search(
     q_enc,
     db,
-    k
+    k,
+    discount=0,
 ):
     nq = q_enc.shape[0]
     indices = np.full((nq, k), -1, dtype='int')
     sorted_scores = np.zeros((nq, k), dtype='float32')
     
     scores = q_enc.dot(db)
+
+    if discount:
+        q_nz = (q_enc > 0).astype('float32')
+        db_nz = (db > 0).astype('float32')
+        discount_matrix = (q_nz).dot(db_nz) * (discount ** 2)
+        scores -= discount_matrix
 
     for query_idx, query_scores in enumerate(scores):
         if query_scores.nnz == 0:
@@ -63,11 +70,12 @@ class SurrogateTextIndex(ABC):
         and computing scores as inner products using inverted lists.
     """
 
-    def __init__(self, vocab_size, parallel):
+    def __init__(self, vocab_size, parallel, discount=0):
         """ Constructor """
         self.db = None
         self.vocab_size = vocab_size
         self.parallel = parallel
+        self.discount = discount
 
         self._to_commit = []
         self.reset()
@@ -152,7 +160,7 @@ class SurrogateTextIndex(ABC):
         if self.parallel:
             batch_size = int(math.ceil(nq / cpu_count()))
             results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
-                delayed(_search)(q_enc[i:i+batch_size], self.db, k)
+                delayed(_search)(q_enc[i:i+batch_size], self.db, k, self.discount)
                 for i in range(0, nq, batch_size)
             )
 
@@ -161,7 +169,7 @@ class SurrogateTextIndex(ABC):
             indices = np.vstack(indices)
 
         else:  # sequential version
-            sorted_scores, indices = _search(q_enc, self.db, k)
+            sorted_scores, indices = _search(q_enc, self.db, k, self.discount)
 
         return sorted_scores, indices
     
