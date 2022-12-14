@@ -86,7 +86,7 @@ class IVFTopKSQ(SurrogateTextIndex):
     def __init__(
         self,
         d,
-        n_coarse_centroids=None,
+        n_coarse_centroids=1,  # FIXME: this should be a required positional argument
         n_subvectors=1,
         keep=0.75,
         sq_factor=1e5,
@@ -130,47 +130,38 @@ class IVFTopKSQ(SurrogateTextIndex):
         vocab_size = self.c * 2 * d if self.rectify_negatives else self.c * d
         super().__init__(vocab_size, parallel)
 
-    def encode(self, x, inverted=True, query=False):
+    def encode(self, x, inverted=True, query=False, nprobe=None):
         """ Encodes vectors and returns their term-frequency representations.
         Args:
             x (ndarray): a (N,D)-shaped matrix of vectors to be encoded.
         """
         sparse_format = 'coo'
         transpose = inverted
+        nprobe = nprobe or self.nprobe
+        nprobe = nprobe if query else 1
 
-        if self.parallel:
-            batch_size = int(math.ceil(len(x) / cpu_count()))
-            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
-                delayed(_ivf_topk_sq_encode)(
-                    x[i:i+batch_size],
-                    self.m,
-                    self.keep,
-                    self._centroids,
-                    self.sq_factor,
-                    self.rectify_negatives,
-                    self.l2_normalize,
-                    self.nprobe if query else 1,
-                    transpose,
-                    sparse_format,
-                ) for i in range(0, len(x), batch_size)
-            )
-
-            results = sparse.hstack(results) if inverted else sparse.vstack(results)
-            return results
-        
-        # non-parallel version
-        return _ivf_topk_sq_encode(
-            x,
+        encode_args = (
             self.m,
             self.keep,
             self._centroids,
             self.sq_factor,
             self.rectify_negatives,
             self.l2_normalize,
-            self.nprobe if query else 1,
+            nprobe,
             transpose,
             sparse_format,
         )
+
+        if self.parallel:
+            func = delayed(_ivf_topk_sq_encode)
+            batch_size = int(math.ceil(len(x) / cpu_count()))
+            jobs = (func(x[i:i+batch_size], *encode_args) for i in range(0, len(x), batch_size))
+            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(jobs)
+            results = sparse.hstack(results) if inverted else sparse.vstack(results)
+            return results
+        
+        # non-parallel version
+        return _ivf_topk_sq_encode(x, *encode_args)
 
     def train(
         self,
@@ -205,8 +196,3 @@ class IVFTopKSQ(SurrogateTextIndex):
 
         self._centroids = l1_kmeans.cluster_centers_
 
-    def search(self, q, k, *args, **kwargs):
-        # nprobe > 1 is already encoded in q_enc, no need to do multiple queries
-        q_enc = self.encode(q, inverted=False, query=True).tocsr()
-        sorted_scores, indices = self.search_encoded(q_enc, k, *args, **kwargs)
-        return sorted_scores, indices
