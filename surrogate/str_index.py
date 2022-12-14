@@ -8,34 +8,6 @@ from scipy import sparse
 from . import util
 
 
-def _csr_hstack(blocks):
-    """ A faster version of hstack for CSR matrix. """
-    num_rows, num_cols = np.array([b.shape for b in blocks]).T
-    
-    assert np.all(num_rows == num_rows[0]), "blocks have different row numbers"
-    num_rows = num_rows[0]
-
-    res_indptr = np.sum([b.indptr for b in blocks], axis=0)
-    res_data = np.empty(res_indptr[-1], dtype=blocks[0].data.dtype)
-    res_indices = np.empty(res_indptr[-1], dtype=blocks[0].indices.dtype)
-
-    offsets = np.cumsum(num_cols)
-    offsets = np.insert(offsets, 0, 0)
-    num_cols = offsets[-1]
-    
-    for i in range(num_rows):
-        res_start = res_indptr[i]
-        for b, o in zip(blocks, offsets):
-            b_start, b_end = b.indptr[i], b.indptr[i+1]
-            b_nnz = b_end - b_start
-            res_end = res_start + b_nnz
-            res_data[res_start:res_end] = b.data[b_start:b_end]
-            res_indices[res_start:res_end] = b.indices[b_start:b_end] + o
-            res_start = res_end
-
-    return sparse.csr_matrix((res_data, res_indices, res_indptr), shape=(num_rows, num_cols))
-
-
 def _search(
     q_enc,
     db,
@@ -90,7 +62,6 @@ class SurrogateTextIndex(ABC):
         self._to_commit.append(x_enc)
     
     def commit(self):
-        # self.db = _csr_hstack([self.db] + self._to_commit)
         self.db = sparse.hstack([self.db] + self._to_commit).tocsr()
         self._to_commit.clear()
     
