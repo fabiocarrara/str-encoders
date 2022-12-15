@@ -23,11 +23,11 @@ def _thr_sq_encode(
     if l2_normalize:
         x = normalize(x)
 
-    if mean is not None:
-        x -= mean
-
     if rotation_matrix is not None:
         x = x.dot(rotation_matrix.T)
+
+    if mean is not None:
+        x -= mean
 
     if rectify_negatives:
         x = np.hstack([np.maximum(x, 0), - np.minimum(x, 0)])
@@ -78,7 +78,7 @@ class ThresholdSQ(SurrogateTextIndex):
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
             subtract_mean (bool): whether to subtract the mean from the dataset features
-            rotation_matrix (array): rotation matrix used to rotate dataset and query features to balance dimensions
+            rotation_matrix (ndarray): a (D,D)-shaped rotation matrix used to rotate dataset and query features to balance dimensions
         """
 
         self.d = d
@@ -107,12 +107,15 @@ class ThresholdSQ(SurrogateTextIndex):
         transpose = inverted
         mean = self.mean if not query else None
 
+        # in case of the query encoding, we move the threshold up of the mean of the mean vector
+        threshold = self.threshold + mean.mean() if mean is not None else self.threshold
+
         if self.parallel:
             batch_size = int(math.ceil(len(x) / cpu_count()))
             results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
                 delayed(_thr_sq_encode)(
                     x[i:i+batch_size],
-                    self.threshold,
+                    threshold,
                     self.sq_factor,
                     self.rectify_negatives,
                     self.l2_normalize,
@@ -139,11 +142,15 @@ class ThresholdSQ(SurrogateTextIndex):
         """
         if self.l2_normalize:
             x = normalize(x)
-
-        if self.rectify_negatives:
-            x = np.fabs(x)
+        
+        if self.rotation_matrix is not None:
+            x = x.dot(self.rotation_matrix.T)
 
         if self.subtract_mean:
             self.mean = x.mean(axis=0)
+            x -= self.mean
+
+        if self.rectify_negatives:
+            x = np.fabs(x)
 
         self.threshold = np.percentile(x, self.threshold_percentile)
