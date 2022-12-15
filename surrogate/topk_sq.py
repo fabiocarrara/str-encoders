@@ -3,6 +3,7 @@ import math
 import numpy as np
 from joblib import cpu_count, delayed, Parallel
 from scipy import sparse
+from scipy.stats import ortho_group
 from sklearn.preprocessing import normalize
 
 from . import util
@@ -82,11 +83,14 @@ class TopKSQ(SurrogateTextIndex):
                                       to encode negative values separately 
                                       (a.k.a. apply CReLU transform).
                                       Defaults to True.
-            rotation_matrix (ndarray): a (D,D)-shaped rotation matrix used to rotate dataset 
-                                       and query features to balance dimensions
             l2_normalize (bool): whether to apply l2-normalization before processing vectors;
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
+            rotation_matrix (ndarray or int): if ndarray: a (D,D)-shaped rotation matrix 
+                                              used to rotate dataset and query features 
+                                              to balance dimensions; if int: the random 
+                                              state used to automatically generate a random 
+                                              rotation matrix. Defaults to None.
         """
 
         self.d = d
@@ -95,6 +99,8 @@ class TopKSQ(SurrogateTextIndex):
         self.rectify_negatives = rectify_negatives
         self.l2_normalize = l2_normalize
         self.rotation_matrix = rotation_matrix
+        if isinstance(rotation_matrix, int):
+            self.rotation_matrix = ortho_group.rvs(d, random_state=rotation_matrix)
 
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel)
