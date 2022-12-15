@@ -78,7 +78,11 @@ class ThresholdSQ(SurrogateTextIndex):
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
             subtract_mean (bool): whether to subtract the mean from the dataset features
-            rotation_matrix (ndarray): a (D,D)-shaped rotation matrix used to rotate dataset and query features to balance dimensions
+            rotation_matrix (ndarray or int): if ndarray: a (D,D)-shaped rotation matrix 
+                                              used to rotate dataset and query features 
+                                              to balance dimensions; if int: the random 
+                                              state used to automatically generate a random 
+                                              rotation matrix. Defaults to None.
         """
 
         self.d = d
