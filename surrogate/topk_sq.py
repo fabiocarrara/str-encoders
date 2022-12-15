@@ -15,6 +15,7 @@ def _topk_sq_encode(
     sq_factor,          # quantization factor
     rectify_negatives,  # whether to apply crelu
     l2_normalize,       # whether to l2-normalize vectors
+    rotation_matrix,    # rotation matrix used to rotate features
     transpose,          # if True, transpose result (returns VxN)
     format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
@@ -23,6 +24,9 @@ def _topk_sq_encode(
 
     if l2_normalize:
         x = normalize(x)
+
+    if rotation_matrix is not None:
+        x = x.dot(rotation_matrix.T)
     
     mult = 2 if rectify_negatives else 1
     xx = np.fabs(x) if rectify_negatives else x
@@ -63,6 +67,7 @@ class TopKSQ(SurrogateTextIndex):
         sq_factor=1000,
         rectify_negatives=True,
         l2_normalize=True,
+        rotation_matrix=None,
         parallel=True
     ):
         """ Constructor
@@ -77,6 +82,8 @@ class TopKSQ(SurrogateTextIndex):
                                       to encode negative values separately 
                                       (a.k.a. apply CReLU transform).
                                       Defaults to True.
+            rotation_matrix (ndarray): a (D,D)-shaped rotation matrix used to rotate dataset 
+                                       and query features to balance dimensions
             l2_normalize (bool): whether to apply l2-normalization before processing vectors;
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
@@ -87,6 +94,7 @@ class TopKSQ(SurrogateTextIndex):
         self.sq_factor = sq_factor
         self.rectify_negatives = rectify_negatives
         self.l2_normalize = l2_normalize
+        self.rotation_matrix = rotation_matrix
 
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel)
@@ -108,6 +116,7 @@ class TopKSQ(SurrogateTextIndex):
                     self.sq_factor,
                     self.rectify_negatives,
                     self.l2_normalize,
+                    self.rotation_matrix,
                     transpose,
                     sparse_format,
                 ) for i in range(0, len(x), batch_size)
@@ -123,6 +132,7 @@ class TopKSQ(SurrogateTextIndex):
             self.sq_factor,
             self.rectify_negatives,
             self.l2_normalize,
+            self.rotation_matrix,
             transpose,
             sparse_format,
         )
