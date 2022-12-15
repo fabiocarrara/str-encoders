@@ -27,7 +27,7 @@ def _thr_sq_encode(
         x = x.dot(rotation_matrix.T)
 
     if mean is not None:
-        x -= mean
+        x = x - mean
 
     if rectify_negatives:
         x = np.hstack([np.maximum(x, 0), - np.minimum(x, 0)])
@@ -152,7 +152,7 @@ class ThresholdSQ(SurrogateTextIndex):
 
         if self.subtract_mean:
             self.mean = x.mean(axis=0)
-            x -= self.mean
+            x = x - self.mean
 
         if self.rectify_negatives:
             x = np.fabs(x)
