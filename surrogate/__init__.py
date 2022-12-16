@@ -3,7 +3,6 @@ import argparse
 from .deep_perm import DeepPermutation
 from .thr_sq import ThresholdSQ
 from .topk_sq import TopKSQ
-from .topk_cnsq import TopKCNSQ
 from .ivf_deep_perm import IVFDeepPermutation
 from .ivf_thr_sq import IVFThresholdSQ
 from .ivf_topk_sq import IVFTopKSQ
