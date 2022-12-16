@@ -177,6 +177,7 @@ def main(args):
     search_metrics.to_csv(search_metrics_path, index=False)
 
     logging.info(f'Done in {search_time} s.')
+    logging.info(serch_metrics.to_markdown())
 
 
 if __name__ == "__main__":
