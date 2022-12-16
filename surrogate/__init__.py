@@ -3,6 +3,7 @@ import argparse
 from .deep_perm import DeepPermutation
 from .thr_sq import ThresholdSQ
 from .topk_sq import TopKSQ
+from .topk_cnsq import TopKCNSQ
 from .ivf_deep_perm import IVFDeepPermutation
 from .ivf_thr_sq import IVFThresholdSQ
 from .ivf_topk_sq import IVFTopKSQ
@@ -87,11 +88,12 @@ def add_index_argparser(parser):
     topksq_parser = subparsers.add_parser('topk-sq', help='TopK Scalar Quantization', **common)
     topksq_parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
     topksq_parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+    topksq_parser.add_argument('-r', '--rotation-matrix', type=int, default=None, help='seed for generating a random orthogonal matrix to apply to vectors; if omitted, no transformation is applied.')
     topksq_parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
     topksq_parser.add_argument('-k', '--keep', type=float, default=0.25, help='Controls how many values are discarded when encoding. Must be between 0.0 and 1.0 inclusive.')
     topksq_parser.set_defaults(
         train_params=(),
-        build_params=('l2_normalize', 'rectify_negatives', 'sq_factor', 'keep'),
+        build_params=('l2_normalize', 'rectify_negatives', 'rotation_matrix', 'sq_factor', 'keep'),
         query_params=()
     )
 
