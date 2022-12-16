@@ -36,7 +36,7 @@ def load_or_train_index(x, train_params, trained_index_path, train_metrics_path,
         logging.info(f'Training index: {index_type}({index_repr})')
 
         train_time = time.time()
-        index.train(x)
+        index.train(x[:])
         train_time = time.time() - train_time
         logging.info(f'Done in {train_time} s.')
 
@@ -123,10 +123,10 @@ def main(args):
     dataset = get_dataset(args.dataset, args.data_root)
     
     logging.info(f'Loading data: {args.dataset}.hdf5')
-    x = dataset['train'][:]
-    q = dataset['test'][:10]
+    x = dataset['train']
+    q = dataset['test']
     n, d = x.shape
-    true_neighbors = dataset['neighbors'][:10]
+    true_neighbors = dataset['neighbors']
     _, lim = true_neighbors.shape
 
     # train index
