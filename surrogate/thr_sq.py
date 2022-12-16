@@ -114,29 +114,27 @@ class ThresholdSQ(SurrogateTextIndex):
         # in case of the query encoding, we move the threshold up of the mean of the mean vector
         threshold = self.threshold + mean.mean() if mean is not None else self.threshold
 
-        if self.parallel:
-            batch_size = int(math.ceil(len(x) / cpu_count()))
-            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
-                delayed(_thr_sq_encode)(
-                    x[i:i+batch_size],
-                    threshold,
-                    self.sq_factor,
-                    self.rectify_negatives,
-                    self.l2_normalize,
-                    self.rotation_matrix,
-                    mean,
-                    transpose,
-                    sparse_format)
-                for i in range(0, len(x), batch_size)
-            )
+        encode_args = (
+            threshold,
+            self.sq_factor,
+            self.rectify_negatives,
+            self.l2_normalize,
+            self.rotation_matrix,
+            mean,
+            transpose,
+            sparse_format,
+        )
 
-            if inverted:
-                return sparse.hstack(results)
-            else: 
-                return sparse.vstack(results)
+        if self.parallel:
+            func = delayed(_thr_sq_encode)
+            batch_size = int(math.ceil(len(x) / cpu_count()))
+            jobs = (func(x[i:i+batch_size], *encode_args) for i in range(0, len(x), batch_size))
+            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(jobs)
+            results = sparse.hstack(results) if inverted else sparse.vstack(results)
+            return results
         
         # non-parallel version
-        sparse_repr = _thr_sq_encode(x, self.threshold, self.sq_factor, self.rectify_negatives, self.l2_normalize, self.rotation_matrix, mean, transpose, sparse_format)
+        sparse_repr = _thr_sq_encode(x, *encode_args)
         return sparse_repr
     
     def train(self, x):

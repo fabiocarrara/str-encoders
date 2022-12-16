@@ -169,23 +169,24 @@ class IVFThresholdSQ(SurrogateTextIndex):
         transpose = inverted
         thresholds = self._thresholds if query else self._residual_thresholds
 
+        encoder_args = (
+            self.m,
+            self._centroids,
+            thresholds,
+            self.sq_factor,
+            self.rectify_negatives,
+            self.l2_normalize,
+            self.nprobe,
+            transpose,
+            sparse_format,
+            query,
+        )
+
         if self.parallel:
+            func = delayed(_ivf_thr_sq_encode)
             batch_size = int(math.ceil(len(x) / cpu_count()))
-            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
-                delayed(_ivf_thr_sq_encode)(
-                    x[i:i+batch_size],
-                    self.m,
-                    self._centroids,
-                    thresholds,
-                    self.sq_factor,
-                    self.rectify_negatives,
-                    self.l2_normalize,
-                    self.nprobe,
-                    transpose,
-                    sparse_format,
-                    query,
-                ) for i in range(0, len(x), batch_size)
-            )
+            jobs = (func(x[i:i+batch_size], *encoder_args) for i in range(0, len(x), batch_size))
+            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(jobs)
 
             if query:
                 results, correction_scores = zip(*results)
@@ -199,19 +200,7 @@ class IVFThresholdSQ(SurrogateTextIndex):
             return results
         
         # non-parallel version
-        return _ivf_thr_sq_encode(
-            x,
-            self.m,
-            self._centroids,
-            thresholds,
-            self.sq_factor,
-            self.rectify_negatives,
-            self.l2_normalize,
-            self.nprobe,
-            transpose,
-            sparse_format,
-            query,
-        )
+        return _ivf_thr_sq_encode(x, *encoder_args)
     
     def train(
         self,

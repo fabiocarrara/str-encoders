@@ -113,27 +113,7 @@ class TopKSQ(SurrogateTextIndex):
         sparse_format = 'coo'
         transpose = inverted
 
-        if self.parallel:
-            batch_size = int(math.ceil(len(x) / cpu_count()))
-            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
-                delayed(_topk_sq_encode)(
-                    x[i:i+batch_size],
-                    self.keep,
-                    self.sq_factor,
-                    self.rectify_negatives,
-                    self.l2_normalize,
-                    self.rotation_matrix,
-                    transpose,
-                    sparse_format,
-                ) for i in range(0, len(x), batch_size)
-            )
-
-            results = sparse.hstack(results) if inverted else sparse.vstack(results)
-            return results
-        
-        # non-parallel version
-        return _topk_sq_encode(
-            x,
+        encode_args = (
             self.keep,
             self.sq_factor,
             self.rectify_negatives,
@@ -142,6 +122,17 @@ class TopKSQ(SurrogateTextIndex):
             transpose,
             sparse_format,
         )
+
+        if self.parallel:
+            func = delayed(_topk_sq_encode)
+            batch_size = int(math.ceil(len(x) / cpu_count()))
+            jobs = (func(x[i:i+batch_size], *encode_args) for i in range(0, len(x), batch_size))
+            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(jobs)
+            results = sparse.hstack(results) if inverted else sparse.vstack(results)
+            return results
+        
+        # non-parallel version
+        return _topk_sq_encode(x, *encode_args)
 
     def train(self, x):
         pass  # no train needed
