@@ -157,8 +157,8 @@ class SurrogateTextIndex(ABC):
     
     def search_cost_encoded(self, q_enc, *args, **kwargs):
         assert not self.dirty, "Search cost can be computed only on committed indices."
-        q_nnz = np.diff(q_enc.indptr)
-        x_nnz = np.diff(self.db.indptr)
+        q_nnz = np.diff(q_enc.indptr).astype(np.int64)
+        x_nnz = np.diff(self.db.indptr).astype(np.int64)
         return np.dot(q_nnz, x_nnz)
     
     @abstractmethod
