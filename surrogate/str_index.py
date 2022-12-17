@@ -17,7 +17,7 @@ def _search(
     nq = q_enc.shape[0]
     indices = np.full((nq, k), -1, dtype='int')
     sorted_scores = np.zeros((nq, k), dtype='float32')
-    
+
     scores = q_enc.dot(db)
 
     if discount:
@@ -29,12 +29,12 @@ def _search(
     for query_idx, query_scores in enumerate(scores):
         if query_scores.nnz == 0:
             continue
-        
+
         query_neighbors = util.topk_sorted(query_scores.data, k)
         indices[query_idx, :len(query_neighbors)] = query_scores.indices[query_neighbors]
         sorted_scores[query_idx, :len(query_neighbors)] = query_scores.data[query_neighbors]
-    
-    return sorted_scores, indices 
+
+    return sorted_scores, indices
 
 
 class SurrogateTextIndex(ABC):
@@ -60,16 +60,16 @@ class SurrogateTextIndex(ABC):
         """
         x_enc = self.encode(x, inverted=True, *args, **kwargs)
         self._to_commit.append(x_enc)
-    
+
     def commit(self):
         self.db = sparse.hstack([self.db] + self._to_commit).tocsr()
         self._to_commit.clear()
-    
+
     @property
     def density(self):
         """Returns the number of non-zero elements stored in the posting lists of the index."""
         return self.db.nnz / np.prod(self.db.shape)
-    
+
     @property
     def dirty(self):
         """Returns whether there are added vectors to commit."""
@@ -117,9 +117,9 @@ class SurrogateTextIndex(ABC):
             q_enc = q_enc.T.tocsr()  # we need inverted=True
             cost = self.search_cost_encoded(q_enc, *args, **kwargs)
             results += (cost,)
-        
+
         return results
-    
+
     def search_encoded(self, q_enc, k, *args, **kwargs):
         """ Performs kNN search with given already encoded queries.
         Args:
@@ -149,18 +149,18 @@ class SurrogateTextIndex(ABC):
             sorted_scores, indices = _search(q_enc, self.db, k, self.discount)
 
         return sorted_scores, indices
-    
+
     def search_cost(self, q, *args, **kwargs):
         assert not self.dirty, "Search cost can be computed only on committed indices."
         q_enc = self.encode(q, *args, inverted=True, query=True, **kwargs).tocsr()
         return self.search_cost_encoded(q_enc, *args, **kwargs)
-    
+
     def search_cost_encoded(self, q_enc, *args, **kwargs):
         assert not self.dirty, "Search cost can be computed only on committed indices."
         q_nnz = np.diff(q_enc.indptr).astype(np.int64)
         x_nnz = np.diff(self.db.indptr).astype(np.int64)
         return np.dot(q_nnz, x_nnz)
-    
+
     @abstractmethod
     def train(self, x):
         """ Learn parameters from data.
@@ -168,4 +168,3 @@ class SurrogateTextIndex(ABC):
             x (ndarray): a (N,D)-shaped matrix of training vectors.
         """
         raise NotImplementedError
-    

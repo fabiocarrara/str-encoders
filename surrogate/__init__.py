@@ -119,5 +119,5 @@ def add_index_argparser(parser):
         build_params=(),
         query_params=()
     )
-    
+
     return parser

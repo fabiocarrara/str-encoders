@@ -28,18 +28,18 @@ def _topk_sq_encode(
 
     if rotation_matrix is not None:
         x = x.dot(rotation_matrix.T)
-    
+
     mult = 2 if rectify_negatives else 1
     xx = np.fabs(x) if rectify_negatives else x
 
     rows = np.arange(n).reshape(n, 1)  # n x 1
     cols = util.topk_sorted(xx, k, axis=1)  # n x k
     data = xx[rows, cols]  # n x k
-    
+
     if rectify_negatives:
         is_positive = x[rows, cols] > 0  # n x k
         cols += np.where(is_positive, 0, d)  # shift indices of negatives after positives
-    
+
     rows, cols, data = np.broadcast_arrays(rows, cols, data)  # n x (m*k) x nprobe
 
     rows = rows.flatten()
@@ -60,7 +60,7 @@ def _topk_sq_encode(
 
 
 class TopKSQ(SurrogateTextIndex):
-    
+
     def __init__(
         self,
         d,
@@ -80,16 +80,16 @@ class TopKSQ(SurrogateTextIndex):
             sq_factor (float): multiplicative factor controlling scalar quantization.
                                Defaults to 1000.
             rectify_negatives (bool): whether to reserve d additional dimensions
-                                      to encode negative values separately 
+                                      to encode negative values separately
                                       (a.k.a. apply CReLU transform).
                                       Defaults to True.
             l2_normalize (bool): whether to apply l2-normalization before processing vectors;
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
-            rotation_matrix (ndarray or int): if ndarray: a (D,D)-shaped rotation matrix 
-                                              used to rotate dataset and query features 
-                                              to balance dimensions; if int: the random 
-                                              state used to automatically generate a random 
+            rotation_matrix (ndarray or int): if ndarray: a (D,D)-shaped rotation matrix
+                                              used to rotate dataset and query features
+                                              to balance dimensions; if int: the random
+                                              state used to automatically generate a random
                                               rotation matrix. Defaults to None.
         """
 
@@ -130,7 +130,7 @@ class TopKSQ(SurrogateTextIndex):
             results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(jobs)
             results = sparse.hstack(results) if inverted else sparse.vstack(results)
             return results
-        
+
         # non-parallel version
         return _topk_sq_encode(x, *encode_args)
 

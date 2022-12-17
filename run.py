@@ -63,7 +63,7 @@ def load_or_train_index(x, train_params, trained_index_path, train_metrics_path,
 def load_or_build_index(index, x, build_params, built_index_path, build_metrics_path, index_batch_size, force):
     if not Path(built_index_path).exists() or force:
         index.reset(build_params)
-        
+
         logging.info('Building index ...')
         n = len(x)
         batch_size = index_batch_size or n

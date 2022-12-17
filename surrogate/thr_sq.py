@@ -49,7 +49,7 @@ def _thr_sq_encode(
 
 
 class ThresholdSQ(SurrogateTextIndex):
-    
+
     def __init__(
         self,
         d,
@@ -71,17 +71,17 @@ class ThresholdSQ(SurrogateTextIndex):
             sq_factor (float): multiplicative factor controlling scalar quantization.
                                Defaults to 1000.
             rectify_negatives (bool): whether to reserve d additional dimensions
-                                      to encode negative values separately 
+                                      to encode negative values separately
                                       (a.k.a. apply CReLU transform).
                                       Defaults to True.
             l2_normalize (bool): whether to apply l2-normalization before processing vectors;
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
             subtract_mean (bool): whether to subtract the mean from the dataset features
-            rotation_matrix (ndarray or int): if ndarray: a (D,D)-shaped rotation matrix 
-                                              used to rotate dataset and query features 
-                                              to balance dimensions; if int: the random 
-                                              state used to automatically generate a random 
+            rotation_matrix (ndarray or int): if ndarray: a (D,D)-shaped rotation matrix
+                                              used to rotate dataset and query features
+                                              to balance dimensions; if int: the random
+                                              state used to automatically generate a random
                                               rotation matrix. Defaults to None.
         """
 
@@ -132,11 +132,11 @@ class ThresholdSQ(SurrogateTextIndex):
             results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(jobs)
             results = sparse.hstack(results) if inverted else sparse.vstack(results)
             return results
-        
+
         # non-parallel version
         sparse_repr = _thr_sq_encode(x, *encode_args)
         return sparse_repr
-    
+
     def train(self, x):
         """ Learn parameters from data.
         Args:
@@ -144,7 +144,7 @@ class ThresholdSQ(SurrogateTextIndex):
         """
         if self.l2_normalize:
             x = normalize(x)
-        
+
         if self.rotation_matrix is not None:
             x = x.dot(self.rotation_matrix.T)
 
