@@ -24,7 +24,7 @@ def configure_logging(log_path):
     )
 
 
-def load_or_train_index(x, train_params, trained_index_path, train_metrics_path, force=False):
+def load_or_train_index(x, train_params, trained_index_path, train_metrics_path, force):
     if not Path(trained_index_path).exists() or force:
         # create index
         d = x.shape[1]
@@ -132,14 +132,14 @@ def main(args):
     # train index
     trained_index_path = exp_train.path_to('empty_trained_index.pickle')
     train_metrics_path = exp_train.path_to('train_metrics.csv')
-    index, train_metrics = load_or_train_index(x, train_params, trained_index_path, train_metrics_path)
+    index, train_metrics = load_or_train_index(x, train_params, trained_index_path, train_metrics_path, args.force)
 
     # build index
     exp_build = Experiment(build_params, root=exp_train.path) if build_params else exp_train
     print(exp_build)
     built_index_path = exp_build.path_to('built_index.pickle')
     build_metrics_path = exp_build.path_to('build_metrics.csv')
-    load_or_build_index(index, x, build_params, built_index_path, build_metrics_path, args.index_batch_size, args.force)
+    index, build_metrics = load_or_build_index(index, x, build_params, built_index_path, build_metrics_path, args.index_batch_size, args.force)
 
     # search and evaluate
     exp_search = Experiment(query_params, root=exp_build.path) if query_params else exp_build
