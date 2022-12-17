@@ -87,10 +87,16 @@ class SurrogateTextIndex(ABC):
         """
         raise NotImplementedError
 
-    def reset(self):
-        """ Clears the index removing stored vectors. Values of learned parameters are kept. """
+    def reset(self, build_params={}):
+        """ Clears the index removing stored vectors. Values of learned parameters are kept.
+            Optionally sets new build parameters.
+        """
         del self.db
         self.db = sparse.coo_matrix((self.vocab_size, 0), dtype='int')
+
+        for k, v in build_params.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
 
     def search(self, q, k, *args, return_cost=False, **kwargs):
         """ Performs kNN search with given queries.
