@@ -60,12 +60,12 @@ def add_index_argparser(parser):
     thrsq_parser = subparsers.add_parser('thr-sq', help='Threshold Scalar Quantization', **common)
     thrsq_parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
     thrsq_parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
-    thrsq_parser.add_argument('-m', '--subtract-mean', action='store_true', default=False, help='Compute and subtract mean database vector.')
     thrsq_parser.add_argument('-r', '--rotation-matrix', type=int, default=None, help='seed for generating a random orthogonal matrix to apply to vectors; if omitted, no transformation is applied.')
+    thrsq_parser.add_argument('-m', '--subtract-mean', action='store_true', default=False, help='Compute and subtract mean database vector.')
     thrsq_parser.add_argument('-Q', '--threshold-percentile', type=int, default=75, help='Controls how many values are discarded when encoding. Must be between 1 and 99 inclusive.')
     thrsq_parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
     thrsq_parser.set_defaults(
-        train_params=('l2_normalize', 'rectify_negatives', 'subtract_mean', 'rotation_matrix', 'threshold_percentile'),
+        train_params=('l2_normalize', 'rectify_negatives', 'rotation_matrix', 'subtract_mean', 'threshold_percentile'),
         build_params=('sq_factor',),
         query_params=()
     )
@@ -88,11 +88,11 @@ def add_index_argparser(parser):
     topksq_parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
     topksq_parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
     topksq_parser.add_argument('-r', '--rotation-matrix', type=int, default=None, help='seed for generating a random orthogonal matrix to apply to vectors; if omitted, no transformation is applied.')
-    topksq_parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
     topksq_parser.add_argument('-k', '--keep', type=float, default=0.25, help='Controls how many values are discarded when encoding. Must be between 0.0 and 1.0 inclusive.')
+    topksq_parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
     topksq_parser.set_defaults(
-        train_params=(),
-        build_params=('l2_normalize', 'rectify_negatives', 'rotation_matrix', 'sq_factor', 'keep'),
+        train_params=('l2_normalize', 'rectify_negatives', 'rotation_matrix'),
+        build_params=('keep', 'sq_factor'),
         query_params=()
     )
 
