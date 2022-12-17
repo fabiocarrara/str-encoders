@@ -12,7 +12,7 @@ from .str_index import SurrogateTextIndex
 
 def _topk_sq_encode(
     x,                  # featues to encode
-    k,                  # the number or fraction of high-value components to keep
+    keep,               # the number or fraction of high-value components to keep
     sq_factor,          # quantization factor
     rectify_negatives,  # whether to apply crelu
     l2_normalize,       # whether to l2-normalize vectors
@@ -21,7 +21,7 @@ def _topk_sq_encode(
     format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
     n, d = x.shape
-    k = int(k * d) if isinstance(k, float) else k
+    k = int(keep * d) if isinstance(keep, float) else keep
 
     if l2_normalize:
         x = normalize(x)
