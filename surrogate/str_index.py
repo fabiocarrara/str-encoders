@@ -42,12 +42,13 @@ class SurrogateTextIndex(ABC):
         and computing scores as inner products using inverted lists.
     """
 
-    def __init__(self, vocab_size, parallel, discount=0):
+    def __init__(self, vocab_size, parallel, discount=0, is_trained=True):
         """ Constructor """
         self.db = None
         self.vocab_size = vocab_size
         self.parallel = parallel
         self.discount = discount
+        self.is_trained = is_trained
 
         self._to_commit = []
         self.reset()

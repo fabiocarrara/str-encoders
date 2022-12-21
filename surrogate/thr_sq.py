@@ -99,7 +99,7 @@ class ThresholdSQ(SurrogateTextIndex):
         self.mean = None
 
         vocab_size = 2 * d if self.rectify_negatives else d
-        super().__init__(vocab_size, parallel)
+        super().__init__(vocab_size, parallel, is_trained=False)
 
     def encode(self, x, inverted=True, query=False, **kwargs):
         """ Encodes vectors and returns their term-frequency representations.
