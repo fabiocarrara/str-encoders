@@ -20,14 +20,14 @@ def _topk_sq_encode(
     transpose,          # if True, transpose result (returns VxN)
     format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
-    n, d = x.shape
-    k = int(keep * d) if isinstance(keep, float) else keep
-
     if l2_normalize:
         x = normalize(x)
 
     if rotation_matrix is not None:
         x = x.dot(rotation_matrix.T)
+
+    n, d = x.shape
+    k = int(keep * d) if isinstance(keep, float) else keep
 
     mult = 2 if rectify_negatives else 1
     xx = np.fabs(x) if rectify_negatives else x
@@ -68,7 +68,8 @@ class TopKSQ(SurrogateTextIndex):
         sq_factor=1000,
         rectify_negatives=True,
         l2_normalize=True,
-        rotation_matrix=None,
+        num_random_dims=None,
+        seed=42,
         parallel=True
     ):
         """ Constructor
@@ -86,11 +87,10 @@ class TopKSQ(SurrogateTextIndex):
             l2_normalize (bool): whether to apply l2-normalization before processing vectors;
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
-            rotation_matrix (ndarray or int): if ndarray: a (D,D)-shaped rotation matrix
-                                              used to rotate dataset and query features
-                                              to balance dimensions; if int: the random
-                                              state used to automatically generate a random
-                                              rotation matrix. Defaults to None.
+            num_random_dims (int): apply a random (semi-)orthogonal matrix to the input to obtain
+                                   this number of dimensions; if None, no transformation is applied.
+                                   Defaults to None.
+            seed (int): the random state used to automatically generate the random matrix.
         """
 
         self.d = d
@@ -98,9 +98,14 @@ class TopKSQ(SurrogateTextIndex):
         self.sq_factor = sq_factor
         self.rectify_negatives = rectify_negatives
         self.l2_normalize = l2_normalize
-        self.rotation_matrix = rotation_matrix
-        if isinstance(rotation_matrix, int):
-            self.rotation_matrix = ortho_group.rvs(d, random_state=rotation_matrix)
+        self.num_random_dims = num_random_dims
+        self.seed = seed
+
+        self._R = None
+        if self.num_random_dims:
+            assert self.num_random_dims >= d, "num_random_dims must be greater or equal than d"
+            self._R = ortho_group.rvs(self.num_random_dims, random_state=self.seed)[:, :d]
+            d = self.num_random_dims
 
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel, is_trained=True)
@@ -118,7 +123,7 @@ class TopKSQ(SurrogateTextIndex):
             self.sq_factor,
             self.rectify_negatives,
             self.l2_normalize,
-            self.rotation_matrix,
+            self._R,
             transpose,
             sparse_format,
         )

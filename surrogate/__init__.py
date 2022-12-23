@@ -87,11 +87,12 @@ def add_index_argparser(parser):
     topksq_parser = subparsers.add_parser('topk-sq', help='TopK Scalar Quantization', **common)
     topksq_parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
     topksq_parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
-    topksq_parser.add_argument('-r', '--rotation-matrix', type=int, default=None, help='seed for generating a random orthogonal matrix to apply to vectors; if omitted, no transformation is applied.')
+    topksq_parser.add_argument('-d', '--num-random-dims', type=int, help='Transform vectors to this dimensionality by applying a random semi-orthogonal transformation; if omitted, no transformation is applied.')
+    topksq_parser.add_argument('-r', '--seed', type=int, default=42, help='seed for generating a random orthogonal matrix to apply to vectors.')
     topksq_parser.add_argument('-k', '--keep', type=float, default=0.25, help='Controls how many values are discarded when encoding. Must be between 0.0 and 1.0 inclusive.')
     topksq_parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
     topksq_parser.set_defaults(
-        train_params=('l2_normalize', 'rectify_negatives', 'rotation_matrix'),
+        train_params=('l2_normalize', 'rectify_negatives', 'num_random_dims', 'seed'),
         build_params=('keep', 'sq_factor'),
         query_params=()
     )
