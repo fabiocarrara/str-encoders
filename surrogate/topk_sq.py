@@ -20,14 +20,14 @@ def _topk_sq_encode(
     transpose,          # if True, transpose result (returns VxN)
     format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
+    n, d = x.shape
+    k = int(keep * d) if isinstance(keep, float) else keep
+
     if l2_normalize:
         x = normalize(x)
 
     if rotation_matrix is not None:
         x = x.dot(rotation_matrix.T)
-
-    n, d = x.shape
-    k = int(keep * d) if isinstance(keep, float) else keep
 
     mult = 2 if rectify_negatives else 1
     xx = np.fabs(x) if rectify_negatives else x
@@ -68,7 +68,7 @@ class TopKSQ(SurrogateTextIndex):
         sq_factor=1000,
         rectify_negatives=True,
         l2_normalize=True,
-        num_random_dims=None,
+        dim_multiplier=None,
         seed=42,
         parallel=True
     ):
@@ -87,9 +87,9 @@ class TopKSQ(SurrogateTextIndex):
             l2_normalize (bool): whether to apply l2-normalization before processing vectors;
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
-            num_random_dims (int): apply a random (semi-)orthogonal matrix to the input to obtain
-                                   this number of dimensions; if None, no transformation is applied.
-                                   Defaults to None.
+            dim_multiplier (float):  apply a random (semi-)orthogonal matrix to the input to expand
+                                     the number of dimensions by this factor; if 0, no transformation is applied.
+                                     Defaults to None.
             seed (int): the random state used to automatically generate the random matrix.
         """
 
@@ -98,14 +98,15 @@ class TopKSQ(SurrogateTextIndex):
         self.sq_factor = sq_factor
         self.rectify_negatives = rectify_negatives
         self.l2_normalize = l2_normalize
-        self.num_random_dims = num_random_dims
+        self.dim_multiplier = dim_multiplier
         self.seed = seed
 
         self._R = None
-        if self.num_random_dims:
-            assert self.num_random_dims >= d, "num_random_dims must be greater or equal than d"
-            self._R = ortho_group.rvs(self.num_random_dims, random_state=self.seed)[:, :d]
-            d = self.num_random_dims
+        if self.dim_multiplier:
+            assert self.dim_multiplier >= 1, "dim_multiplier must be >= 1.0"
+            dd = int(dim_multiplier * d)
+            self._R = ortho_group.rvs(dd, random_state=self.seed)[:, :d]
+            d = dd
 
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel, is_trained=True)
