@@ -28,6 +28,7 @@ def _topk_sq_encode(
 
     if rotation_matrix is not None:
         x = x.dot(rotation_matrix.T)
+        d = x.shape[1]
 
     mult = 2 if rectify_negatives else 1
     xx = np.fabs(x) if rectify_negatives else x
