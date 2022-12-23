@@ -64,13 +64,13 @@ def _fast_random_semiorth(m, n, seed=7):
     rng = np.random.default_rng(seed)
     M = rng.normal(loc=0, scale=1 / np.sqrt(m), size=(m, n)).T
     I = np.eye(n)
-    
+
     for i in range(100):
         M = M - 0.5 * (M.dot(M.T) - I).dot(M)
         iI = M.dot(M.T)
         if np.allclose(iI, I):
             return M
-    
+
     warnings.warn("Semi-orthogonal matrix not converged after maximum iterations.")
     return M
 

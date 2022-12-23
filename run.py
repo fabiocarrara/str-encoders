@@ -56,7 +56,7 @@ def load_or_train_index(x, train_params, trained_index_path, train_metrics_path,
             index = pickle.load(f)
 
         train_metrics = pd.read_csv(train_metrics_path)
-    
+
     return index, train_metrics
 
 
@@ -93,7 +93,7 @@ def load_or_build_index(index, x, build_params, built_index_path, build_metrics_
             index = pickle.load(f)
 
         build_metrics = pd.read_csv(build_metrics_path)
-    
+
     return index, build_metrics
 
 
@@ -118,10 +118,10 @@ def main(args):
     # setup logging
     log_path = exp_train.path_to('log.txt')
     configure_logging(log_path)
-    
+
     # load data in RAM
     dataset = get_dataset(args.dataset, args.data_root)
-    
+
     logging.info(f'Loading data: {args.dataset}.hdf5')
     x = dataset['train']
     q = dataset['test']
@@ -170,7 +170,7 @@ def main(args):
             'recall@k.mean': recalls.mean(),
             'recall@k.std': recalls.std(),
         })
-    
+
     search_metrics = pd.DataFrame(search_metrics)
     search_metrics['search_time'] = search_time
     search_metrics['search_cost'] = search_cost
