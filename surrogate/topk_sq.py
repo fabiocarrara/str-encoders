@@ -14,9 +14,8 @@ def _topk_sq_encode(
     x,                  # featues to encode
     keep,               # the number or fraction of high-value components to keep
     sq_factor,          # quantization factor
-    rectify_negatives,  # whether to apply crelu
     l2_normalize,       # whether to l2-normalize vectors
-    rotation_matrix,    # rotation matrix used to rotate features
+    ortho_matrix,       # (semi-)orthogonal matrix used to shuffle feature information
     transpose,          # if True, transpose result (returns VxN)
     format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
@@ -26,8 +25,8 @@ def _topk_sq_encode(
     if l2_normalize:
         x = normalize(x)
 
-    if rotation_matrix is not None:
-        x = x.dot(rotation_matrix.T)
+    if ortho_matrix is not None:
+        x = x.dot(ortho_matrix.T)
         d = x.shape[1]
 
     mult = 2 if rectify_negatives else 1
@@ -61,6 +60,7 @@ def _topk_sq_encode(
 
 
 def _fast_random_semiorth(m, n, seed=7):
+    """ See Eq (1) of https://doi.org/10.21437/Interspeech.2018-1417 """
     rng = np.random.default_rng(seed)
     M = rng.normal(loc=0, scale=1 / np.sqrt(m), size=(m, n)).T
     I = np.eye(n)
@@ -120,9 +120,9 @@ class TopKSQ(SurrogateTextIndex):
         self._R = None
         if self.dim_multiplier:
             assert self.dim_multiplier >= 1, "dim_multiplier must be >= 1.0"
-            dd = int(dim_multiplier * d)
-            self._R = _fast_random_semiorth(dd, d, seed=self.seed).T
-            d = dd
+            new_d = int(dim_multiplier * d)
+            self._R = _fast_random_semiorth(new_d, d, seed=self.seed).T
+            d = new_d
 
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel, is_trained=True)

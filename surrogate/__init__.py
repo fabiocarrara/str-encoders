@@ -89,7 +89,7 @@ def add_index_argparser(parser):
     topksq_parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
     topksq_parser.add_argument('-d', '--dim-multiplier', type=float, default=1.0, help='Expand input dimensionality by this factor applying a random semi-orthogonal transformation; if 0, no transformation is applied.')
     topksq_parser.add_argument('-r', '--seed', type=int, default=42, help='seed for generating a random orthogonal matrix to apply to vectors.')
-    topksq_parser.add_argument('-k', '--keep', type=float, default=0.25, help='How many values are kept when encoding expressed as fraction of the input dimensionality. Must be between 0.0 and 1.0 inclusive.')
+    topksq_parser.add_argument('-k', '--keep', type=float, default=0.25, help='How many values are kept when encoding expressed as fraction of the input dimensionality. Must be between 0.0 and the value of `--dim-multiplier`.')
     topksq_parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
     topksq_parser.set_defaults(
         train_params=('l2_normalize', 'rectify_negatives', 'dim_multiplier', 'seed'),
