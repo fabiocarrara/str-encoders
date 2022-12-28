@@ -14,6 +14,7 @@ def _topk_sq_encode(
     x,                  # featues to encode
     keep,               # the number or fraction of high-value components to keep
     sq_factor,          # quantization factor
+    rectify_negatives,  # whether to apply CReLU transformation
     l2_normalize,       # whether to l2-normalize vectors
     ortho_matrix,       # (semi-)orthogonal matrix used to shuffle feature information
     transpose,          # if True, transpose result (returns VxN)
@@ -91,9 +92,9 @@ class TopKSQ(SurrogateTextIndex):
         """ Constructor
         Args:
             d (int): the number of dimensions of the vectors to be encoded.
-            keep (int or float): if int, number of components to keep (must be between 0 and d);
+            keep (int or float): if int, number of components to keep;
                                  if float, the fraction of components to keep (must
-                                 be between 0.0 and 1.0). Defaults to 0.25.
+                                 be between 0.0 and dim_multiplier). Defaults to 0.25.
             sq_factor (float): multiplicative factor controlling scalar quantization.
                                Defaults to 1000.
             rectify_negatives (bool): whether to reserve d additional dimensions
