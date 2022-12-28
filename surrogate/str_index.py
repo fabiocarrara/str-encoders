@@ -135,19 +135,24 @@ class SurrogateTextIndex(ABC):
         k = self.db.shape[0] if k is None else k
         nq = q_enc.shape[0]
 
+        search_args = (
+            self.db,
+            k,
+            self.discount,
+        )
+
         if self.parallel:
+            func = delayed(_search)
             batch_size = int(math.ceil(nq / cpu_count()))
-            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(
-                delayed(_search)(q_enc[i:i+batch_size], self.db, k, self.discount)
-                for i in range(0, nq, batch_size)
-            )
+            jobs = (func(q_enc[i:i+batch_size], *search_args) for i in range(0, nq, batch_size))
+            results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(jobs)
 
             sorted_scores, indices = zip(*results)
             sorted_scores = np.vstack(sorted_scores)
             indices = np.vstack(indices)
 
         else:  # sequential version
-            sorted_scores, indices = _search(q_enc, self.db, k, self.discount)
+            sorted_scores, indices = _search(q_enc, *search_args)
 
         return sorted_scores, indices
 
