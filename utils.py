@@ -5,18 +5,23 @@ import time
 import h5py
 import numpy as np
 import requests
+from sklearn.preprocessing import normalize
 from tqdm import tqdm
 
 
-def get_random_dataset(d, nx, nq, data_root='./data'):
+def get_random_dataset(metric, d, nx, nq, data_root='./data'):
+    assert metric in ('dot', 'angular'), "Random dataset metric must be one of ('dot', 'angular')."
     datapath = Path(data_root)
     datapath.mkdir(exist_ok=True)
-    datapath = datapath / f'random-{d}-dot-{nx}db-{nq}q.hdf5'
+    datapath = datapath / f'random-{d}-{metric}-{nx}db-{nq}q.hdf5'
     if not datapath.exists():
 
         test = 2 * np.random.rand(nq, d).astype(np.float32) - 1
         train = 2 * np.random.rand(nx, d).astype(np.float32) - 1
-        distances = test.dot(train.T)
+        if metric == 'angular':
+            distances = normalize(test).dot(normalize(train).T)
+        else:    
+            distances = test.dot(train.T)
         neighbors = distances.argsort(axis=1)[:, ::-1].astype(np.int32)
 
         with h5py.File(datapath, 'w') as f:
@@ -56,8 +61,10 @@ def download_file(url: str, fname: str):
 
 def get_dataset(dataset_name, data_root='./data'):
     if dataset_name.startswith('random'):
-        d, nx, nq = map(int, dataset_name.split('-')[1:])
-        return get_random_dataset(d, nx, nq, data_root=data_root)
+        attributes = dataset_name.split('-')
+        metric = attributes[1]
+        d, nx, nq = map(int, attributes[2:])
+        return get_random_dataset(metric, d, nx, nq, data_root=data_root)
     
     return get_ann_benchmark(dataset_name, data_root=data_root)
 
