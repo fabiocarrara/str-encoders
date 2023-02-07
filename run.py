@@ -172,7 +172,7 @@ def main(args):
                 'partial_n_queries': partial_n_queries,
                 'partial_query_time': partial_query_time,
             })
-            search_stopped.to_csv(search_stopped_path, index=False)
+            search_stopped.to_csv(search_stopped_path)
             return
 
     nns = np.vstack(nns)
