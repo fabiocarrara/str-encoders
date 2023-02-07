@@ -146,7 +146,9 @@ def main(args):
     print(exp_search)
 
     search_metrics_path = exp_search.path_to('search_metrics.csv')
-    if Path(search_metrics_path).exists() and not args.force:
+    search_stopped_path = exp_search.path_to('search_stopped.csv')
+
+    if not args.force and (Path(search_metrics_path).exists() or Path(search_stopped_path).exists()):
         logging.info('Skipping run.')
         return
 
@@ -159,6 +161,20 @@ def main(args):
         _, nns_batch, cost = index.search(q[i:i + batch_size], k=lim, return_cost=True, **query_params)
         nns.append(nns_batch)
         search_cost += cost
+
+        partial_search_time = time.time() - search_time
+        partial_n_queries = sum(n.shape[0] for n in nns)
+        partial_query_time = partial_search_time / partial_n_queries
+        if partial_query_time > args.search_timeout:
+            logging.info(f'Stopping, too slow ({partial_n_queries} queries in {partial_search_time:.2g}s: {partial_query_time:.2g} s/query).')
+            search_stopped = pd.Series({
+                'partial_search_time': partial_search_time,
+                'partial_n_queries': partial_n_queries,
+                'partial_query_time': partial_query_time,
+            })
+            search_stopped.to_csv(search_stopped_path, index=False)
+            return
+
     nns = np.vstack(nns)
     search_time = time.time() - search_time
 
@@ -191,7 +207,7 @@ if __name__ == "__main__":
     parser.add_argument('--force', default=False, action='store_true', help='force index training')
     parser.add_argument('-b', '--index-batch-size', type=int, default=None, help='index data in batches with this size')
     parser.add_argument('-B', '--search-batch-size', type=int, default=None, help='search data in batches with this size')
-    parser.add_argument('-t', '--search-timeout', type=int, default=1000, help='stop parameter search when search time (in seconds) is over this value')
+    parser.add_argument('-t', '--search-timeout', type=float, default=1.0, help='stop search when the estimated query time (in seconds) is over this value')
 
     parser = surrogate.add_index_argparser(parser)
     args = parser.parse_args()
