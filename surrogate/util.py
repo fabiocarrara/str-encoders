@@ -43,7 +43,7 @@ def generate_documents(x_enc, compact=True, delimiter='|'):
     for i in range(n_docs):
         xi_enc = x_enc.getrow(i)
         if compact:
-            doc = [f'{term}{delimiter}{frequency}' for term, frequency in zip(xi_enc.indices, xi_enc.data)]
+            doc = [f'{term}{delimiter}{frequency}' for term, frequency in zip(xi_enc.indices, xi_enc.data) if frequency > 0]
         else:
             doc = [[str(term)] * frequency for term, frequency in zip(xi_enc.indices, xi_enc.data)]
             doc = itertools.chain.from_iterable(doc)
