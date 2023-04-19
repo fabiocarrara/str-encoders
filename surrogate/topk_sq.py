@@ -13,6 +13,7 @@ from .str_index import SurrogateTextIndex
 def _topk_sq_encode(
     x,                  # featues to encode
     keep,               # the number or fraction of high-value components to keep
+    shift_value,        # if not None, apply Negated Concatenation and add this value
     sq_factor,          # quantization factor
     rectify_negatives,  # whether to apply CReLU transformation
     l2_normalize,       # whether to l2-normalize vectors
@@ -27,21 +28,32 @@ def _topk_sq_encode(
         x = normalize(x)
 
     if ortho_matrix is not None:
-        x = x.dot(ortho_matrix.T)
+        x = x.dot(ortho_matrix)
         d = x.shape[1]
 
-    mult = 2 if rectify_negatives else 1
-    xx = np.fabs(x) if rectify_negatives else x
+    apply_ncs = shift_value is not None  # apply negated concatenation and shift
+    assert not (rectify_negatives and apply_ncs), "Cannot apply both CReLU and NCS"
+
+    mult = 2 if rectify_negatives or apply_ncs else 1
+    xx = np.fabs(x) if rectify_negatives or apply_ncs else x
 
     rows = np.arange(n).reshape(n, 1)  # n x 1
     cols = util.topk_sorted(xx, k, axis=1)  # n x k
-    data = xx[rows, cols]  # n x k
 
     if rectify_negatives:
+        data = xx[rows, cols]  # n x k
         is_positive = x[rows, cols] > 0  # n x k
         cols += np.where(is_positive, 0, d)  # shift indices of negatives after positives
 
-    rows, cols, data = np.broadcast_arrays(rows, cols, data)  # n x (m*k) x nprobe
+    elif apply_ncs:
+        data = x[rows, cols]  # n x k
+        cols = np.hstack((cols, cols + d))  # n x 2*k
+        data = np.hstack((data, -data)) + shift_value  # n x 2*k
+    
+    else:
+        data = xx[rows, cols]
+
+    rows, cols, data = np.broadcast_arrays(rows, cols, data)  # n x k, or n x 2*k
 
     rows = rows.flatten()
     cols = cols.flatten()
@@ -82,12 +94,13 @@ class TopKSQ(SurrogateTextIndex):
         self,
         d,
         keep=0.25,
+        shift_value=None,
         sq_factor=1000,
-        rectify_negatives=True,
+        rectify_negatives=False,
         l2_normalize=True,
         dim_multiplier=None,
         seed=42,
-        parallel=True
+        parallel=True,
     ):
         """ Constructor
         Args:
@@ -95,12 +108,13 @@ class TopKSQ(SurrogateTextIndex):
             keep (int or float): if int, number of components to keep;
                                  if float, the fraction of components to keep (must
                                  be between 0.0 and dim_multiplier). Defaults to 0.25.
+            shift_value (float): if not None, applies negated concatenation and adds
+                                 this value to components to make them positive.
+                                 Defaults to 1.
             sq_factor (float): multiplicative factor controlling scalar quantization.
                                Defaults to 1000.
-            rectify_negatives (bool): whether to reserve d additional dimensions
-                                      to encode negative values separately
-                                      (a.k.a. apply CReLU transform).
-                                      Defaults to True.
+            rectify_negatives (bool): whether to apply CReLU transform.
+                                      Defaults to False.
             l2_normalize (bool): whether to apply l2-normalization before processing vectors;
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
@@ -112,6 +126,7 @@ class TopKSQ(SurrogateTextIndex):
 
         self.d = d
         self.keep = keep
+        self.shift_value = shift_value
         self.sq_factor = sq_factor
         self.rectify_negatives = rectify_negatives
         self.l2_normalize = l2_normalize
@@ -122,11 +137,17 @@ class TopKSQ(SurrogateTextIndex):
         if self.dim_multiplier:
             assert self.dim_multiplier >= 1, "dim_multiplier must be >= 1.0"
             new_d = int(dim_multiplier * d)
-            self._R = _fast_random_semiorth(new_d, d, seed=self.seed).T
+            self._R = _fast_random_semiorth(new_d, d, seed=self.seed)
             d = new_d
 
-        vocab_size = 2 * d if self.rectify_negatives else d
-        super().__init__(vocab_size, parallel, is_trained=True)
+        apply_ncs = shift_value is not None  # whether to apply negated concatenation and shift
+        reserve_additional_dims = self.rectify_negatives or apply_ncs
+        vocab_size = 2 * d if reserve_additional_dims else d
+
+        discount = 0
+        if apply_ncs:
+            discount = np.fix((shift_value * sq_factor) ** 2).astype('int')
+        super().__init__(vocab_size, parallel, discount=discount, is_trained=True)
 
     def encode(self, x, inverted=True, query=False):
         """ Encodes vectors and returns their term-frequency representations.
@@ -138,6 +159,7 @@ class TopKSQ(SurrogateTextIndex):
 
         encode_args = (
             self.keep,
+            self.shift_value,
             self.sq_factor,
             self.rectify_negatives,
             self.l2_normalize,

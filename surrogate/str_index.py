@@ -21,9 +21,10 @@ def _search(
     scores = q_enc.dot(db)
 
     if discount:
-        q_nz = (q_enc > 0).astype('float32')
-        db_nz = (db > 0).astype('float32')
-        discount_matrix = (q_nz).dot(db_nz) * (discount ** 2)
+        q_nz = (q_enc > 0).astype('int')
+        db_nz = (db > 0).astype('int')
+        accessed_posts = (q_nz).dot(db_nz)
+        discount_matrix = accessed_posts * discount
         scores -= discount_matrix
 
     for query_idx, query_scores in enumerate(scores):
