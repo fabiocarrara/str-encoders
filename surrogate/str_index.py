@@ -53,6 +53,12 @@ class SurrogateTextIndex(ABC):
 
         self._to_commit = []
         self.reset()
+    
+    @staticmethod
+    @abstractmethod
+    def add_subparser(subparser, **kws):
+        """ Adds a subparser to the given parser to add the index initialization options. """
+        raise NotImplementedError
 
     def add(self, x, *args, **kwargs):
         """ Encodes and stores encoded vectors (in sparse format) for subsequent search.

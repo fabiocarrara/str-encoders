@@ -70,6 +70,17 @@ class DeepPermutation(SurrogateTextIndex):
 
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel)
+    
+    def add_subparser(subparsers, **kws):
+        parser = subparsers.add_parser('deep-perm', help='Deep Permutation', **kws)
+        parser.add_argument('-c', '--use-centroids', action='store_true', default=False, help='Find Pivots with k-Means.')
+        parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+        parser.add_argument('-L', '--permutation-length', type=int, default=None, help='length of the permutation prefix (None for full permutation)')
+        parser.set_defaults(
+            train_params=('use_centroids',),
+            build_params=('rectify_negatives', 'permutation_length'),
+            query_params=()
+        )
 
     def encode(self, x, inverted=True, **kwargs):
         """ Encodes vectors and returns their term-frequency representations.

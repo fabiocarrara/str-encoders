@@ -105,6 +105,19 @@ class IVFDeepPermutation(SurrogateTextIndex):
 
         vocab_size = self.c * 2 * d if self.rectify_negatives else self.c * d
         super().__init__(vocab_size, parallel)
+    
+    def add_subparser(subparsers, **kws):
+        parser = subparsers.add_parser('ivf-deep-perm', help='Chunked Deep Permutation', **kws)
+        parser.add_argument('-c', '--n-coarse-centroids', type=int, default=512, help='no of coarse centroids')
+        parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
+        parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+        parser.add_argument('-L', '--permutation-length', type=int, default=32, help='length of the permutation prefix (None for full permutation)')
+        parser.add_argument('-p', '--nprobe', type=int, default=1, help='how many partitions to visit at query time')
+        parser.set_defaults(
+            train_params=('n_coarse_centroids', 'l2_normalize'),
+            build_params=('rectify_negatives', 'permutation_length'),
+            query_params=('nprobe',)
+        )
 
     def encode(self, x, inverted=True, query=False, **kwargs):
         """ Encodes vectors and returns their term-frequency representations.

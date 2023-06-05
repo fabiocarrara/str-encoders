@@ -100,6 +100,20 @@ class ThresholdSQ(SurrogateTextIndex):
 
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel, is_trained=False)
+    
+    def add_subparser(subparsers, **kws):
+        parser = subparsers.add_parser('thr-sq', help='Threshold Scalar Quantization', **kws)
+        parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
+        parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+        parser.add_argument('-r', '--rotation-matrix', type=int, default=None, help='seed for generating a random orthogonal matrix to apply to vectors; if omitted, no transformation is applied.')
+        parser.add_argument('-m', '--subtract-mean', action='store_true', default=False, help='Compute and subtract mean database vector.')
+        parser.add_argument('-Q', '--threshold-percentile', type=int, default=75, help='Controls how many values are discarded when encoding. Must be between 1 and 99 inclusive.')
+        parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
+        parser.set_defaults(
+            train_params=('l2_normalize', 'rectify_negatives', 'rotation_matrix', 'subtract_mean', 'threshold_percentile'),
+            build_params=('sq_factor',),
+            query_params=()
+        )
 
     def encode(self, x, inverted=True, query=False, **kwargs):
         """ Encodes vectors and returns their term-frequency representations.

@@ -149,6 +149,21 @@ class TopKSQ(SurrogateTextIndex):
             discount = np.fix((shift_value * sq_factor) ** 2).astype('int')
         super().__init__(vocab_size, parallel, discount=discount, is_trained=True)
 
+    def add_subparser(subparsers, **kws):
+        parser = subparsers.add_parser('topk-sq', help='TopK Scalar Quantization', **kws)
+        parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
+        parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+        parser.add_argument('-t', '--shift-value', type=float, default=None, help='Constant added to component values to make them positive.')
+        parser.add_argument('-d', '--dim-multiplier', type=float, default=1.0, help='Expand input dimensionality by this factor applying a random semi-orthogonal transformation; if 0, no transformation is applied.')
+        parser.add_argument('-r', '--seed', type=int, default=42, help='seed for generating a random orthogonal matrix to apply to vectors.')
+        parser.add_argument('-k', '--keep', type=float, default=0.25, help='How many values are kept when encoding expressed as fraction of the input dimensionality. Must be between 0.0 and the value of `--dim-multiplier`.')
+        parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
+        parser.set_defaults(
+            train_params=('l2_normalize', 'rectify_negatives', 'shift_value', 'dim_multiplier', 'seed'),
+            build_params=('keep', 'sq_factor'),
+            query_params=()
+        )
+
     def encode(self, x, inverted=True, query=False):
         """ Encodes vectors and returns their term-frequency representations.
         Args:

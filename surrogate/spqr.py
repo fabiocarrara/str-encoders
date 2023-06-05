@@ -232,6 +232,17 @@ class SPQR(SurrogateTextIndex):
         elif self.engine == 'sklearn':
             self.l1_centroids, self.l2_centroids = _spqr_train_sklearn(x, self.c, self.m, self.f)
     
+    def add_subparser(subparsers, **kws):
+        spqr_parser = subparsers.add_parser('spqr', help='SPQR', **kws)
+        spqr_parser.add_argument('-c', '--n-coarse-centroids', type=int, default=None, help='no of coarse centroids')
+        spqr_parser.add_argument('-m', '--n-subvectors', type=int, default=None, help='no of subvectors for PQ')
+        spqr_parser.add_argument('-f', '--n-fine-centroids', type=int, default=2**8, help='no of fine centroids')
+        spqr_parser.set_defaults(
+            train_params=('n_coarse_centroids', 'n_subvectors', 'n_fine_centroids'),
+            build_params=(),
+            query_params=()
+        )
+        
     def encode(self, x, inverted=True):
         """ Encodes vectors and returns their SPQR representations.
         Args:

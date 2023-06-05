@@ -129,6 +129,21 @@ class IVFTopKSQ(SurrogateTextIndex):
 
         vocab_size = self.c * 2 * d if self.rectify_negatives else self.c * d
         super().__init__(vocab_size, parallel)
+    
+    def add_subparser(subparsers, **kws):
+        parser = subparsers.add_parser('ivf-topk-sq', help='Chunked TopK Scalar Quantization', **kws)
+        parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
+        parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+        parser.add_argument('-c', '--n-coarse-centroids', type=int, default=512, help='no of coarse centroids')
+        parser.add_argument('-m', '--n-subvectors', type=int, default=1, help='no of subvectors')
+        parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
+        parser.add_argument('-k', '--keep', type=float, default=0.25, help='Controls how many values are discarded when encoding. Must be between 0.0 and 1.0 inclusive.')
+        parser.add_argument('-p', '--nprobe', type=int, default=1, help='how many partitions to visit at query time')
+        parser.set_defaults(
+            train_params=('l2_normalize', 'n_coarse_centroids', 'n_subvectors'),
+            build_params=('rectify_negatives', 'sq_factor', 'keep'),
+            query_params=('nprobe',)
+        )
 
     def encode(self, x, inverted=True, query=False, nprobe=None):
         """ Encodes vectors and returns their term-frequency representations.

@@ -160,6 +160,21 @@ class IVFThresholdSQ(SurrogateTextIndex):
         vocab_size = self.c * 2 * d if self.rectify_negatives else self.c * d
         super().__init__(vocab_size, parallel)
 
+    def add_subparser(subparsers, **kws):
+        parser = subparsers.add_parser('ivf-thr-sq', help='Residual Chunked Threshold Scalar Quantization', **kws)
+        parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
+        parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+        parser.add_argument('-c', '--n-coarse-centroids', type=int, default=512, help='no of coarse centroids')
+        parser.add_argument('-m', '--n-subvectors', type=int, default=1, help='no of subvectors')
+        parser.add_argument('-Q', '--threshold-percentile', type=int, default=75, help='Controls how many values are discarded when encoding. Must be between 1 and 99 inclusive.')
+        parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
+        parser.add_argument('-p', '--nprobe', type=int, default=1, help='how many partitions to visit at query time')
+        parser.set_defaults(
+            train_params=('l2_normalize', 'rectify_negatives', 'n_coarse_centroids', 'n_subvectors', 'threshold_percentile'),
+            build_params=('sq_factor',),
+            query_params=('nprobe',)
+        )
+
     def encode(self, x, inverted=True, query=False):
         """ Encodes vectors and returns their term-frequency representations.
         Args:
