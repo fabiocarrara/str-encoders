@@ -115,13 +115,13 @@ class IVFThresholdSQ(SurrogateTextIndex):
     def __init__(
         self,
         d,
-        n_coarse_centroids=None,
-        n_subvectors=None,
+        n_coarse_centroids=512,
+        n_subvectors=1,
         threshold_percentile=75,
         sq_factor=1000,
         rectify_negatives=True,
         l2_normalize=True,
-        parallel=True
+        parallel=False,
     ):
         """ Constructor
         Args:

@@ -71,10 +71,11 @@ class IVFDeepPermutation(SurrogateTextIndex):
     def __init__(
         self,
         d,
-        n_coarse_centroids,
+        n_coarse_centroids=512,
+        permutation_length=32,
         rectify_negatives=True,
         l2_normalize=False,
-        parallel=True
+        parallel=True,
     ):
         """ Constructor
         Args:
@@ -96,7 +97,7 @@ class IVFDeepPermutation(SurrogateTextIndex):
 
         self.d = d
         self.c = n_coarse_centroids
-        self.permutation_length = None
+        self.permutation_length = permutation_length
         self.rectify_negatives = rectify_negatives
         self.l2_normalize = l2_normalize
         self.nprobe = 1
