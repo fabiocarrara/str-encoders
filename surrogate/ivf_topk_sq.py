@@ -206,6 +206,7 @@ class IVFTopKSQ(SurrogateTextIndex):
             n_clusters=self.c,
             batch_size=256*cpu_count(),
             compute_labels=False,
+            n_init='auto',
             **kmeans_kws
         ).fit(xt)
 
