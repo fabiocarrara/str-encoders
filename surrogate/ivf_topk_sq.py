@@ -1,5 +1,6 @@
 import logging
 import math
+from pathlib import Path
 
 import numpy as np
 from joblib import cpu_count, delayed, Parallel
@@ -97,6 +98,7 @@ class IVFTopKSQ(SurrogateTextIndex):
         self,
         d,
         n_coarse_centroids=1,
+        centroids_cache_dir=None,
         keep=0.75,
         shift_value=None,
         sq_factor=1e5,
@@ -111,6 +113,8 @@ class IVFTopKSQ(SurrogateTextIndex):
             d (int): the number of dimensions of the vectors to be encoded.
             n_coarse_centroids (int): the number of coarse centroids of the level 1
                                       quantizer (voronoi partitioning).
+            centroids_cache_dir (Path): the directory where to cache the centroids. If None,
+                                        no caching is performed. Defaults to None.
             keep (int or float): if int, number of components to keep;
                                  if float, the fraction of components to keep (must
                                  be between 0.0 and dim_multiplier). Defaults to 0.25.
@@ -129,11 +133,12 @@ class IVFTopKSQ(SurrogateTextIndex):
             dim_multiplier (float):  apply a random (semi-)orthogonal matrix to the input to expand
                                      the number of dimensions by this factor; if 0, no transformation is applied.
                                      Defaults to None.
-            seed (int): the random state used to automatically generate the random matrix.
+            seed (int): the random state used to automatically generate the random matrix and the centroids.
         """
 
         self.d = d
         self.c = n_coarse_centroids
+        self.centroids_cache_dir = centroids_cache_dir
         self.nprobe = 1
         self.keep = keep
         self.shift_value = shift_value
@@ -165,6 +170,7 @@ class IVFTopKSQ(SurrogateTextIndex):
         parser = subparsers.add_parser('ivf-topk-sq', help='Chunked TopK Scalar Quantization', **kws)
         parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
         parser.add_argument('-c', '--n-coarse-centroids', type=int, default=512, help='no of coarse centroids')
+        parser.add_argument('-a', '--centroids-cache-dir', type=Path, default=None, help='directory where to cache the centroids')
         parser.add_argument('-p', '--nprobe', type=int, default=1, help='how many partitions to visit at query time')
         parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
         parser.add_argument('-t', '--shift-value', type=float, default=None, help='Constant added to component values to make them positive.')
@@ -173,9 +179,10 @@ class IVFTopKSQ(SurrogateTextIndex):
         parser.add_argument('-k', '--keep', type=float, default=0.25, help='Controls how many values are discarded when encoding. Must be between 0.0 and 1.0 inclusive.')
         parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
         parser.set_defaults(
-            train_params=('l2_normalize', 'n_coarse_centroids', 'rectify_negatives', 'shift_value', 'dim_multiplier', 'seed'),
+            train_params=('l2_normalize', 'n_coarse_centroids', 'centroids_cache_dir', 'rectify_negatives', 'shift_value', 'dim_multiplier', 'seed'),
             build_params=('sq_factor', 'keep'),
-            query_params=('nprobe',)
+            query_params=('nprobe',),
+            ignore_params=('centroids_cache_dir',)
         )
 
     def encode(self, x, inverted=True, query=False, nprobe=None):
@@ -223,6 +230,15 @@ class IVFTopKSQ(SurrogateTextIndex):
             x (ndarray): a (N,D)-shaped matrix of training vectors.
         """
 
+        centroid_cache = None
+        if self.centroids_cache_dir:
+            centroid_cache = self.centroids_cache_dir / f'centroids_n{self.c}_seed{self.seed}.npy'
+            if centroid_cache.exists():
+                logging.info(f'Loading centroids from {centroid_cache}')
+                self._centroids = np.load(centroid_cache)
+                self.is_trained = True
+                return
+
         if self.l2_normalize:
             x = normalize(x)
 
@@ -241,8 +257,15 @@ class IVFTopKSQ(SurrogateTextIndex):
             batch_size=256*cpu_count(),
             compute_labels=False,
             n_init='auto',
+            random_state=self.seed,
             **kmeans_kws
         ).fit(xt)
 
         self._centroids = l1_kmeans.cluster_centers_
+        self.is_trained = True
+
+        if centroid_cache:
+            logging.info(f'Saving centroids to {centroid_cache}')
+            centroid_cache.parent.mkdir(parents=True, exist_ok=True)
+            np.save(centroid_cache, self._centroids)
 
