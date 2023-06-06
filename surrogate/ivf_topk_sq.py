@@ -10,59 +10,69 @@ from sklearn.preprocessing import normalize
 
 from . import util
 from .str_index import SurrogateTextIndex
+from .topk_sq import _fast_random_semiorth
 
 
 def _ivf_topk_sq_encode(
     x,                  # featues to encode
-    m,                  # number of subvectors
-    k,                  # the number or fraction of high-value components to keep
-    centroids,          # l1 quantizer centroids
+    # IVF parameters
+    centroids,          # centroids
+    nprobe,             # how many coarse centroids to consider
+    # SQ parameters
+    keep,               # the number or fraction of high-value components to keep
+    shift_value,        # if not None, apply Negated Concatenation and add this value
     sq_factor,          # quantization factor
     rectify_negatives,  # whether to apply crelu
     l2_normalize,       # whether to l2-normalize vectors
-    nprobe,             # how many coarse centroids to consider
+    ortho_matrix,       # (semi-)orthogonal matrix used to shuffle feature information
     transpose,          # if True, transpose result (returns VxN)
     format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
     n, d = x.shape
     c = len(centroids)
     nprobe = min(nprobe, c)
+    k = int(keep * d) if isinstance(keep, float) else keep
 
     if l2_normalize:
         x = normalize(x)
     
-    l1_centroid_distances = cdist(x, centroids, metric='sqeuclidean')
-    coarse_codes = util.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
+    centroid_distances = cdist(x, centroids, metric='sqeuclidean')
+    coarse_codes = util.bottomk_sorted(centroid_distances, nprobe, axis=1)  # n x nprobe
 
-    dsub = d // m
-    x = x.reshape(n, m, dsub)  # n x m x d/m
+    if ortho_matrix is not None:
+        x = x.dot(ortho_matrix)
+        d = x.shape[1]
 
-    mult = 2 if rectify_negatives else 1
-    xx = np.fabs(x) if rectify_negatives else x
+    # dsub = d // m
+    # x = x.reshape(n, m, dsub)  # n x m x d/m
 
-    # keep the topk components per subvector
-    k = int(k * dsub) if isinstance(k, float) else k
+    apply_ncs = shift_value is not None  # apply negated concatenation and shift
+    assert not (rectify_negatives and apply_ncs), "Cannot apply both CReLU and NCS"
 
-    cols = util.topk_sorted(xx, k, axis=2)  # n x m x k
-    cols += np.arange(m).reshape(1, m, 1) * dsub  # shift indices to the right subvector
-    cols = cols.reshape(n, -1)  # n x (m*k)
+    mult = 2 if rectify_negatives or apply_ncs else 1
+    xx = np.fabs(x) if rectify_negatives or apply_ncs else x
 
     rows = np.arange(n).reshape(n, 1)  # n x 1
+    cols = util.topk_sorted(xx, k, axis=1)  # n x k
 
-    x = x.reshape(n, d)
-    xx = xx.reshape(n, d)
-
-    is_positive = x[rows, cols] > 0  # n x (m*k)
-    data = xx[rows, cols]  # n x (m*k)
-    
     if rectify_negatives:
+        data = xx[rows, cols]  # n x k
+        is_positive = x[rows, cols] > 0  # n x k
         cols += np.where(is_positive, 0, d)  # shift indices of negatives after positives
-    
-    cols = np.stack([cols + coarse_codes[:, [i]] * mult * d for i in range(nprobe)], axis=-1)  # n x (m*k) x nprobe
-    rows = np.expand_dims(rows, axis=-1)  # n x 1 x 1
-    data = np.expand_dims(data, axis=-1)  # n x (m*k) x 1
 
-    rows, cols, data = np.broadcast_arrays(rows, cols, data)  # n x (m*k) x nprobe
+    elif apply_ncs:
+        data = x[rows, cols]  # n x k
+        cols = np.hstack((cols, cols + d))  # n x 2*k
+        data = np.hstack((data, -data)) + shift_value  # n x 2*k
+    
+    else:
+        data = xx[rows, cols]
+    
+    cols = np.stack([cols + coarse_codes[:, [i]] * mult * d for i in range(nprobe)], axis=-1)  # n x k x nprobe
+    rows = np.expand_dims(rows, axis=-1)  # n x 1 x 1
+    data = np.expand_dims(data, axis=-1)  # n x (2*)k x 1
+
+    rows, cols, data = np.broadcast_arrays(rows, cols, data)  # n x (2*)k x nprobe
 
     rows = rows.flatten()
     cols = cols.flatten()
@@ -86,27 +96,29 @@ class IVFTopKSQ(SurrogateTextIndex):
     def __init__(
         self,
         d,
-        n_coarse_centroids=1,  # FIXME: this should be a required positional argument
-        n_subvectors=1,
+        n_coarse_centroids=1,
         keep=0.75,
+        shift_value=None,
         sq_factor=1e5,
         rectify_negatives=True,
         l2_normalize=True,
-        parallel=True
+        dim_multiplier=None,
+        seed=42,
+        parallel=True,
     ):
         """ Constructor
         Args:
             d (int): the number of dimensions of the vectors to be encoded.
             n_coarse_centroids (int): the number of coarse centroids of the level 1
                                       quantizer (voronoi partitioning).
-            n_subvectors (int): the number of subvectors of the level 2 quantizer
-                                (scalar quantization).
-            k (int or float): if int, number of components per subvector to keep
-                              (must be between 0 and (d / n_subvectors));
-                              if float, the fraction of components to keep (must
-                              be between 0.0 and 1.0). Defaults to 0.25.
+            keep (int or float): if int, number of components to keep;
+                                 if float, the fraction of components to keep (must
+                                 be between 0.0 and dim_multiplier). Defaults to 0.25.
+            shift_value (float): if not None, applies negated concatenation and adds
+                                 this value to components to make them positive.
+                                 Defaults to None.
             sq_factor (float): multiplicative factor controlling scalar quantization.
-                               Defaults to 1000.
+                               Defaults to 10000.
             rectify_negatives (bool): whether to reserve d additional dimensions
                                       to encode negative values separately 
                                       (a.k.a. apply CReLU transform).
@@ -114,34 +126,55 @@ class IVFTopKSQ(SurrogateTextIndex):
             l2_normalize (bool): whether to apply l2-normalization before processing vectors;
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
+            dim_multiplier (float):  apply a random (semi-)orthogonal matrix to the input to expand
+                                     the number of dimensions by this factor; if 0, no transformation is applied.
+                                     Defaults to None.
+            seed (int): the random state used to automatically generate the random matrix.
         """
 
         self.d = d
         self.c = n_coarse_centroids
-        self.m = n_subvectors
+        self.nprobe = 1
         self.keep = keep
+        self.shift_value = shift_value
         self.sq_factor = sq_factor
         self.rectify_negatives = rectify_negatives
         self.l2_normalize = l2_normalize
-        self.nprobe = 1
+        self.dim_multiplier = dim_multiplier
+        self.seed = seed
 
         self._centroids = None
+        self._R = None
+        if self.dim_multiplier:
+            assert self.dim_multiplier >= 1, "dim_multiplier must be >= 1.0"
+            new_d = int(dim_multiplier * d)
+            self._R = _fast_random_semiorth(new_d, d, seed=self.seed)
+            d = new_d
 
-        vocab_size = self.c * 2 * d if self.rectify_negatives else self.c * d
-        super().__init__(vocab_size, parallel)
+        apply_ncs = shift_value is not None  # whether to apply negated concatenation and shift
+        reserve_additional_dims = self.rectify_negatives or apply_ncs
+        vocab_size = 2 * d if reserve_additional_dims else d
+        vocab_size *= self.c
+
+        discount = 0
+        if apply_ncs:
+            discount = np.fix((shift_value * sq_factor) ** 2).astype('int')
+        super().__init__(vocab_size, parallel, discount=discount, is_trained=False)
     
     def add_subparser(subparsers, **kws):
         parser = subparsers.add_parser('ivf-topk-sq', help='Chunked TopK Scalar Quantization', **kws)
         parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
-        parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
         parser.add_argument('-c', '--n-coarse-centroids', type=int, default=512, help='no of coarse centroids')
-        parser.add_argument('-m', '--n-subvectors', type=int, default=1, help='no of subvectors')
-        parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
-        parser.add_argument('-k', '--keep', type=float, default=0.25, help='Controls how many values are discarded when encoding. Must be between 0.0 and 1.0 inclusive.')
         parser.add_argument('-p', '--nprobe', type=int, default=1, help='how many partitions to visit at query time')
+        parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
+        parser.add_argument('-t', '--shift-value', type=float, default=None, help='Constant added to component values to make them positive.')
+        parser.add_argument('-d', '--dim-multiplier', type=float, default=1.0, help='Expand input dimensionality by this factor applying a random semi-orthogonal transformation; if 0, no transformation is applied.')
+        parser.add_argument('-r', '--seed', type=int, default=42, help='seed for generating a random orthogonal matrix to apply to vectors.')
+        parser.add_argument('-k', '--keep', type=float, default=0.25, help='Controls how many values are discarded when encoding. Must be between 0.0 and 1.0 inclusive.')
+        parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
         parser.set_defaults(
-            train_params=('l2_normalize', 'n_coarse_centroids', 'n_subvectors'),
-            build_params=('rectify_negatives', 'sq_factor', 'keep'),
+            train_params=('l2_normalize', 'n_coarse_centroids', 'rectify_negatives', 'shift_value', 'dim_multiplier', 'seed'),
+            build_params=('sq_factor', 'keep'),
             query_params=('nprobe',)
         )
 
@@ -156,13 +189,14 @@ class IVFTopKSQ(SurrogateTextIndex):
         nprobe = nprobe if query else 1
 
         encode_args = (
-            self.m,
-            self.keep,
             self._centroids,
+            nprobe,
+            self.keep,
+            self.shift_value,
             self.sq_factor,
             self.rectify_negatives,
             self.l2_normalize,
-            nprobe,
+            self._R,
             transpose,
             sparse_format,
         )
