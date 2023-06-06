@@ -103,6 +103,7 @@ def main(args):
     train_params = all_params.pop('train_params') + ('index_type',)
     build_params = all_params.pop('build_params')
     query_params = all_params.pop('query_params')
+    ignore_params = all_params.pop('ignore_params', ())
     index_params = train_params + build_params + query_params
 
     train_params  = {k: v for k, v in all_params.items() if k     in train_params}
@@ -111,7 +112,7 @@ def main(args):
     common_params = {k: v for k, v in all_params.items() if k not in index_params}
 
     root_params = dict(**common_params, **train_params)
-    ignore = common_params.keys() - {'dataset'}  # ignore all common params but 'dataset'
+    ignore = common_params.keys() - {'dataset'} | set(ignore_params)  # ignore all common params but 'dataset'
     exp_train = Experiment(root_params, root=args.exp_root, ignore=ignore)
     print(exp_train)
 
@@ -135,14 +136,14 @@ def main(args):
     index, train_metrics = load_or_train_index(x, train_params, trained_index_path, train_metrics_path, args.force)
 
     # build index
-    exp_build = Experiment(build_params, root=exp_train.path) if build_params else exp_train
+    exp_build = Experiment(build_params, root=exp_train.path, ignore=ignore) if build_params else exp_train
     print(exp_build)
     built_index_path = exp_build.path_to('built_index.pickle')
     build_metrics_path = exp_build.path_to('build_metrics.csv')
     index, build_metrics = load_or_build_index(index, x, build_params, built_index_path, build_metrics_path, args.index_batch_size, args.force)
 
     # search and evaluate
-    exp_search = Experiment(query_params, root=exp_build.path) if query_params else exp_build
+    exp_search = Experiment(query_params, root=exp_build.path, ignore=ignore) if query_params else exp_build
     print(exp_search)
 
     search_metrics_path = exp_search.path_to('search_metrics.csv')
