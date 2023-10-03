@@ -60,3 +60,12 @@ q_docs = surrogate.generate_documents(q_enc)
 # print the document
 print(next(q_docs))
 ```
+
+# References
+Carrara et al., Vec2Doc: Transforming Dense Vectors into Sparse Representations for Efficient Information Retrieval. SISAP 2023.
+
+Carrara et al., [Approximate nearest neighbor search on standard search engines](https://link.springer.com/chapter/10.1007/978-3-031-17849-8_17). SISAP 2022.
+
+Amato et al., [Large-scale instance-level image retrieval](https://www.sciencedirect.com/science/article/pii/S0306457319301682). IP&M 2020.
+
+Amato et al., [Large-Scale Image Retrieval with Elasticsearch](https://dl.acm.org/doi/abs/10.1145/3209978.3210089). SIGIR 2018.
