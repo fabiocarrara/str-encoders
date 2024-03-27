@@ -70,6 +70,7 @@ class SurrogateTextIndex(ABC):
         self._to_commit.append(x_enc)
 
     def commit(self):
+        """ Commits added vectors to the index. """
         self.db = sparse.hstack([self.db] + self._to_commit).tocsr()
         self._to_commit.clear()
 
@@ -166,11 +167,24 @@ class SurrogateTextIndex(ABC):
         return sorted_scores, indices
 
     def search_cost(self, q, *args, **kwargs):
+        """ Computes the cost of searching for given queries.
+        Args:
+            q (ndarray): a (N,D)-shaped matrix of query vectors.
+            args, kwargs: additional arguments for the encode() method.
+        Returns:
+            int: the number of accessed elements in the inverted index.
+        """
         assert not self.dirty, "Search cost can be computed only on committed indices."
         q_enc = self.encode(q, *args, inverted=True, query=True, **kwargs).tocsr()
         return self.search_cost_encoded(q_enc, *args, **kwargs)
 
     def search_cost_encoded(self, q_enc, *args, **kwargs):
+        """ Computes the cost of searching for given already encoded queries.
+        Args:
+            q_enc (sparse.csr_matrix): a (N,V)-shaped sparse matrix of encoded query vectors.
+        Returns:
+            int: the number of accessed elements in the inverted index.
+        """
         assert not self.dirty, "Search cost can be computed only on committed indices."
         q_nnz = np.diff(q_enc.indptr).astype(np.int64)
         x_nnz = np.diff(self.db.indptr).astype(np.int64)

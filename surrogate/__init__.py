@@ -22,6 +22,14 @@ REGISTERED_INDICES = {
 
 
 def index_factory(d, index_type, index_params):
+    """ Factory function to create an index object.
+    Args:
+        d (int): the number of dimensions of the vectors to be indexed.
+        index_type (str): the type of index to create. See `surrogate.REGISTERED_INDICES`.
+        index_params (dict): parameters to pass to the index constructor.
+    Returns:
+        SurrogateTextIndex: the index object.
+    """
     if index_type in REGISTERED_INDICES:
         return REGISTERED_INDICES[index_type](d, **index_params)
 
@@ -29,6 +37,12 @@ def index_factory(d, index_type, index_params):
 
 
 def add_index_argparser(parser):
+    """ Add an argument parser for the index type.
+    Args:
+        parser (argparse.ArgumentParser): the parser to which to add the subparsers.
+    Returns:
+        argparse.ArgumentParser: the parser with the added subparsers.
+    """
     subparsers = parser.add_subparsers(dest='index_type', help='STR index type. Can be one of:', metavar='index', required=True)
     common = dict(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 

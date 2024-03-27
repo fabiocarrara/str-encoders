@@ -1,3 +1,10 @@
+"""
+TopK Scalar Quantization (TopK-SQ) is a vector quantization technique that
+encodes vectors by keeping only the top-k components with the highest values.
+The remaining components are quantized using scalar quantization. TopK-SQ can
+be used to encode sparse vectors and is particularly useful when the vectors
+are high-dimensional and sparse.
+"""
 import math
 import warnings
 
@@ -89,6 +96,7 @@ def _fast_random_semiorth(m, n, seed=7):
 
 
 class TopKSQ(SurrogateTextIndex):
+    """ TopK Scalar Quantization (TopK-SQ) index. """
 
     def __init__(
         self,

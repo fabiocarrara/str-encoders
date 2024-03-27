@@ -1,3 +1,4 @@
+""" Voronoi-partitioned variant of the TopK Scalar Quantization Index. """
 import logging
 import math
 from pathlib import Path
@@ -93,7 +94,7 @@ def _ivf_topk_sq_encode(
 
 
 class IVFTopKSQ(SurrogateTextIndex):
-    
+    """ Voronoi-partitioned variant of the TopK Scalar Quantization Index. """
     def __init__(
         self,
         d,

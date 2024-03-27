@@ -38,6 +38,16 @@ def topk_sorted(x, k, axis=0):
 
 
 def generate_documents(x_enc, compact=True, delimiter='|'):
+    """ Generates surrogate documents from encoded vectors.
+
+    Args:
+        x_enc (sparse.csr_matrix): a (N,D)-shaped sparse matrix of encoded vectors.
+        compact (bool): whether use <term><delimiter><term-frequecy> format.
+        delimiter (str): delimiter between term and frequency.
+    
+    Yields:
+        str: a document string per row where terms are space-separated.
+    """
     x_enc = x_enc.tocsr()
     n_docs = x_enc.shape[0]
 

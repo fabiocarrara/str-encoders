@@ -1,3 +1,7 @@
+""" Threshold Scalar Quantization (ThrSQ) encoding.
+This module provides the Threshold Scalar Quantization encoding, in which vectors are thresholded
+and scalar quantized to obtain a sparse representation.
+"""
 import math
 
 import numpy as np
@@ -49,6 +53,7 @@ def _thr_sq_encode(
 
 
 class ThresholdSQ(SurrogateTextIndex):
+    """ Threshold Scalar Quantization (ThrSQ) index. """
 
     def __init__(
         self,

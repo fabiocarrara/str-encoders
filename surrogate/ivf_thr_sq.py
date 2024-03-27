@@ -1,3 +1,4 @@
+""" IVF-THR-SQ index implementation. """
 import logging
 import math
 
@@ -111,7 +112,7 @@ def _ivf_thr_sq_encode(
 
 
 class IVFThresholdSQ(SurrogateTextIndex):
-    
+    """ Voronoi-partitioned Threshold Scalar Quantization (IVF-THR-SQ) index. """
     def __init__(
         self,
         d,

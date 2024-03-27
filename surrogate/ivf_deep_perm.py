@@ -1,3 +1,6 @@
+""" IVF-Deep-Permutation
+This module provides the Voronoi-partitioned variant of the Deep Permutation Index.
+"""
 import logging
 import math
 
@@ -67,7 +70,8 @@ def _ivf_deep_perm_encode(
 
 
 class IVFDeepPermutation(SurrogateTextIndex):
-    
+    """ Voronoi-partitioned Deep Permutation Index """
+
     def __init__(
         self,
         d,

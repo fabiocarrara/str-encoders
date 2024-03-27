@@ -1,3 +1,7 @@
+""" Deep Permutation Index
+This module provides a Deep Permutation Index, in which vectors are encoded as truncated
+permutations obtained by sorting the components of the vectors.
+"""
 import math
 
 import numpy as np
@@ -36,7 +40,7 @@ def _deep_perm_encode(
 
 
 class DeepPermutation(SurrogateTextIndex):
-    
+    """ Deep Permutation Index. """
     def __init__(
         self,
         d,
