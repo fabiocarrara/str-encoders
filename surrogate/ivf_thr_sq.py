@@ -22,7 +22,7 @@ def _ivf_thr_sq_encode(
     l2_normalize,       # whether to l2-normalize vectors
     nprobe,             # how many coarse centroids to consider
     transpose,          # if True, transpose result (returns VxN)
-    format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
+    sparse_format,      # sparse format of result ('csr', 'csc', 'coo', etc.)
     query,              # whether to apply query encoding (no residual, returns correction scores)
 ):
     n, d = x.shape
@@ -31,14 +31,14 @@ def _ivf_thr_sq_encode(
 
     if l2_normalize:
         x = normalize(x)
-    
+
     l1_centroid_distances = cdist(x, centroids, metric='sqeuclidean')
     coarse_codes = util.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
 
     if query:  # compute norms for later
         x_norm = np.linalg.norm(x, axis=1) if not l2_normalize else np.ones(n)
         c_norm = np.linalg.norm(centroids, axis=1)
-    
+
     # repeat x for nprobe times (1st nprobe times, then 2nd nprobe times, etc.; enables batching)
     x = np.broadcast_to(x.reshape(n, 1, d), (n, nprobe, d)).reshape(n * nprobe, d)  # n * nprobe, d
     coarse_codes = coarse_codes.flatten()  # n * nprobe
@@ -75,7 +75,7 @@ def _ivf_thr_sq_encode(
         rows_pos, cols_pos = idx_pos
         rows_neg, cols_neg = idx_neg
 
-        cols_pos += coarse_codes[rows_pos] * 2 * d 
+        cols_pos += coarse_codes[rows_pos] * 2 * d
         cols_neg += coarse_codes[rows_neg] * 2 * d + d
 
         data = np.hstack((data_pos, data_neg))
@@ -101,12 +101,12 @@ def _ivf_thr_sq_encode(
         rows, cols = cols, rows
         shape = shape[::-1]
 
-    spclass = getattr(sparse, f'{format}_matrix')
+    spclass = getattr(sparse, f'{sparse_format}_matrix')
     encoded = spclass((data, (rows, cols)), shape=shape)
 
     if query:
         return encoded, correction_scores
-    
+
     return encoded
 
 
@@ -156,10 +156,12 @@ class IVFThresholdSQ(SurrogateTextIndex):
 
         self._centroids = None
         self._thresholds = None
+        self._residual_thresholds = None
 
         vocab_size = self.c * 2 * d if self.rectify_negatives else self.c * d
         super().__init__(vocab_size, parallel)
 
+    @staticmethod
     def add_subparser(subparsers, **kws):
         parser = subparsers.add_parser('ivf-thr-sq', help='Residual Chunked Threshold Scalar Quantization', **kws)
         parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
@@ -211,17 +213,17 @@ class IVFThresholdSQ(SurrogateTextIndex):
 
             if query:
                 return results, correction_scores
-            
+
             return results
-        
+
         # non-parallel version
         return _ivf_thr_sq_encode(x, *encoder_args)
-    
+
     def train(
         self,
         x,
         max_samples_per_centroid=256,
-        kmeans_kws={}
+        kmeans_kws=None,
     ):
         """ Learn parameters from data.
         Args:
@@ -242,17 +244,18 @@ class IVFThresholdSQ(SurrogateTextIndex):
         xt = x
         max_samples = max_samples_per_centroid * self.c
         if nx > max_samples:  # subsample train set
-            logging.info(f'subsampling {max_samples} / {nx} for coarse centroid training.')
+            logging.info('subsampling %s / %s for coarse centroid training.', max_samples, nx)
             subset = np.random.choice(nx, size=max_samples, replace=False)
             xt = x[subset]
 
         # compute coarse centroids
+        kmeans_kws = kmeans_kws or {}
         l1_kmeans = MiniBatchKMeans(
             n_clusters=self.c,
             batch_size=256*cpu_count(),
             compute_labels=False,
             n_init='auto',
-            **kmeans_kws
+            **kmeans_kws,
         ).fit(xt)
 
         self._centroids = l1_kmeans.cluster_centers_

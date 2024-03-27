@@ -53,10 +53,10 @@ class SurrogateTextIndex(ABC):
 
         self._to_commit = []
         self.reset()
-    
+
     @staticmethod
     @abstractmethod
-    def add_subparser(subparser, **kws):
+    def add_subparser(subparsers, **kws):
         """ Adds a subparser to the given parser to add the index initialization options. """
         raise NotImplementedError
 
@@ -95,13 +95,14 @@ class SurrogateTextIndex(ABC):
         """
         raise NotImplementedError
 
-    def reset(self, build_params={}):
+    def reset(self, build_params=None):
         """ Clears the index removing stored vectors. Values of learned parameters are kept.
             Optionally sets new build parameters.
         """
         del self.db
         self.db = sparse.coo_matrix((self.vocab_size, 0), dtype='int')
 
+        build_params = build_params or {}
         for k, v in build_params.items():
             if hasattr(self, k):
                 setattr(self, k, v)
@@ -111,7 +112,8 @@ class SurrogateTextIndex(ABC):
         Args:
             q (ndarray): a (N,D)-shaped matrix of query vectors.
             k (int): the number of nearest neighbors to return.
-            return_cost (bool): whether to return query cost in terms of retrieved elements in the inverted index.
+            return_cost (bool): whether to return query cost in terms of retrieved elements in the
+                                inverted index.
             args, kwargs: additional arguments for the encode() method.
 
         Returns:

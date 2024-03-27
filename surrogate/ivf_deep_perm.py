@@ -20,7 +20,7 @@ def _ivf_deep_perm_encode(
     l2_normalize,       # whether to l2-normalize vectors
     nprobe,             # how many coarse centroids to consider
     transpose,          # if True, transpose result (returns VxN)
-    format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
+    sparse_format,      # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
     n, d = x.shape
     c = len(centroids)
@@ -29,7 +29,7 @@ def _ivf_deep_perm_encode(
 
     if l2_normalize:
         x = normalize(x)
-    
+
     l1_centroid_distances = cdist(x, centroids, metric='sqeuclidean')
     coarse_codes = util.bottomk_sorted(l1_centroid_distances, nprobe, axis=1)  # n x nprobe
 
@@ -42,10 +42,10 @@ def _ivf_deep_perm_encode(
     rows = np.arange(n).reshape(n, 1)  # n x 1
 
     is_positive = x[rows, cols] >= 0  # n x k
-    
+
     if rectify_negatives:
         cols += np.where(is_positive, 0, d)  # shift indices of negatives after positives
-    
+
     cols = np.stack([cols + coarse_codes[:, [i]] * mult * d for i in range(nprobe)], axis=-1)  # n x k x nprobe
     rows = np.expand_dims(rows, axis=-1)  # n x 1 x 1
     data = np.arange(k, 0, -1).reshape(1, -1, 1)  # 1 x k x 1
@@ -62,7 +62,7 @@ def _ivf_deep_perm_encode(
         rows, cols = cols, rows
         shape = shape[::-1]
 
-    spclass = getattr(sparse, f'{format}_matrix')
+    spclass = getattr(sparse, f'{sparse_format}_matrix')
     return spclass((data, (rows, cols)), shape=shape)
 
 
@@ -107,6 +107,7 @@ class IVFDeepPermutation(SurrogateTextIndex):
         vocab_size = self.c * 2 * d if self.rectify_negatives else self.c * d
         super().__init__(vocab_size, parallel)
     
+    @staticmethod
     def add_subparser(subparsers, **kws):
         parser = subparsers.add_parser('ivf-deep-perm', help='Chunked Deep Permutation', **kws)
         parser.add_argument('-c', '--n-coarse-centroids', type=int, default=512, help='no of coarse centroids')
@@ -162,7 +163,7 @@ class IVFDeepPermutation(SurrogateTextIndex):
         self,
         x,
         max_samples_per_centroid=256,
-        kmeans_kws={},
+        kmeans_kws=None,
     ):
         """ Learn parameters from data.
         Args:
@@ -177,17 +178,18 @@ class IVFDeepPermutation(SurrogateTextIndex):
         xt = x
         max_samples = max_samples_per_centroid * self.c
         if nx > max_samples:  # subsample train set
-            logging.info(f'subsampling {max_samples} / {nx} for coarse centroid training.')
+            logging.info('subsampling %s / %s for coarse centroid training.', max_samples, nx)
             subset = np.random.choice(nx, size=max_samples, replace=False)
             xt = x[subset]
 
         # compute coarse centroids
+        kmeans_kws = kmeans_kws or {}
         l1_kmeans = MiniBatchKMeans(
             n_clusters=self.c,
             batch_size=256*cpu_count(),
             compute_labels=False,
             n_init='auto',
-            **kmeans_kws
+            **kmeans_kws,
         ).fit(xt)
 
         self._centroids = l1_kmeans.cluster_centers_

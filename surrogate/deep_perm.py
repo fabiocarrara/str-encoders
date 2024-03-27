@@ -12,7 +12,7 @@ from .str_index import SurrogateTextIndex
 def _deep_perm_encode(
     x,                  # featues to encode
     permutation_length, # length of permutation prefix
-    rectify_negatives   # whether to apply crelu
+    rectify_negatives,  # whether to apply crelu
 ):
     if rectify_negatives:
         x = np.hstack([np.maximum(x, 0), - np.minimum(x, 0)])
@@ -25,7 +25,7 @@ def _deep_perm_encode(
     rows = np.arange(n).reshape(-1, 1)
     cols = topk
     data = np.arange(k, 0, -1).reshape(1, -1)
-    
+
     rows, cols, data = np.broadcast_arrays(rows, cols, data)
 
     rows = rows.flatten()
@@ -42,7 +42,7 @@ class DeepPermutation(SurrogateTextIndex):
         d,
         use_centroids=False,
         rectify_negatives=True,
-        parallel=True
+        parallel=True,
     ):
         """ Constructor
         Args:
@@ -70,7 +70,8 @@ class DeepPermutation(SurrogateTextIndex):
 
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel)
-    
+
+    @staticmethod
     def add_subparser(subparsers, **kws):
         parser = subparsers.add_parser('deep-perm', help='Deep Permutation', **kws)
         parser.add_argument('-c', '--use-centroids', action='store_true', default=False, help='Find Pivots with k-Means.')
@@ -104,7 +105,7 @@ class DeepPermutation(SurrogateTextIndex):
             # then convert to CSR
             # results = results.tocsr()
             return results
-        
+
         # non-parallel version
         rows, cols, data, n = _deep_perm_encode(x, self.permutation_length, self.rectify_negatives)
         if inverted:
@@ -114,7 +115,7 @@ class DeepPermutation(SurrogateTextIndex):
             shape = (n, self.vocab_size)
 
         return sparse.coo_matrix((data, (rows, cols)), shape=shape)
-    
+
     def train(self, x):
         """ Learn parameters from data.
         Args:

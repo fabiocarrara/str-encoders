@@ -18,7 +18,7 @@ def _thr_sq_encode(
     rotation_matrix,    # rotation matrix used to rotate features
     mean,               # mean vector computed on the whole dataset
     transpose,          # if True, transpose result (returns VxN)
-    format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
+    sparse_format,      # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
     if l2_normalize:
         x = normalize(x)
@@ -44,7 +44,7 @@ def _thr_sq_encode(
     if transpose:
         x = x.T
 
-    spclass = getattr(sparse, f'{format}_matrix')
+    spclass = getattr(sparse, f'{sparse_format}_matrix')
     return spclass(x)
 
 
@@ -100,7 +100,8 @@ class ThresholdSQ(SurrogateTextIndex):
 
         vocab_size = 2 * d if self.rectify_negatives else d
         super().__init__(vocab_size, parallel, is_trained=False)
-    
+
+    @staticmethod
     def add_subparser(subparsers, **kws):
         parser = subparsers.add_parser('thr-sq', help='Threshold Scalar Quantization', **kws)
         parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')

@@ -33,15 +33,15 @@ def load_or_train_index(x, train_params, trained_index_path, train_metrics_path,
 
         # train index
         index_repr = ' '.join([f'{k}={v}' for k, v in train_params.items()])
-        logging.info(f'Training index: {index_type}({index_repr})')
+        logging.info('Training index: %s(%s)', index_type, index_repr)
 
         train_time = time.time()
         index.train(x[:])
         train_time = time.time() - train_time
-        logging.info(f'Done in {train_time} s.')
+        logging.info('Done in %s s.', train_time)
 
         # save trained index
-        logging.info(f'Saving trained index: {trained_index_path}')
+        logging.info('Saving trained index: %s', trained_index_path)
         with open(trained_index_path, 'wb') as f:
             pickle.dump(index, f)
 
@@ -51,7 +51,7 @@ def load_or_train_index(x, train_params, trained_index_path, train_metrics_path,
         train_metrics.to_csv(train_metrics_path, index=False)
 
     else:
-        logging.info(f'Reading pretrained index from: {trained_index_path}')
+        logging.info('Reading pretrained index from: %s', trained_index_path)
         with open(trained_index_path, 'rb') as f:
             index = pickle.load(f)
 
@@ -72,10 +72,10 @@ def load_or_build_index(index, x, build_params, built_index_path, build_metrics_
             index.add(x[i:i + batch_size])
         index.commit()
         build_time = time.time() - build_time
-        logging.info(f'Done in {build_time} s.')
+        logging.info('Done in %s s.', build_time)
 
         # save built index
-        logging.info(f'Saving built index: {built_index_path}')
+        logging.info('Saving built index: %s', built_index_path)
         with open(built_index_path, 'wb') as f:
             pickle.dump(index, f)
 
@@ -88,7 +88,7 @@ def load_or_build_index(index, x, build_params, built_index_path, build_metrics_
         build_metrics.to_csv(build_metrics_path, index=False)
 
     else:
-        logging.info(f'Reading prebuilt index from: {built_index_path}')
+        logging.info('Reading prebuilt index from: %s', built_index_path)
         with open(built_index_path, 'rb') as f:
             index = pickle.load(f)
 
@@ -123,7 +123,7 @@ def main(args):
     # load data in RAM
     dataset = get_dataset(args.dataset, args.data_root)
 
-    logging.info(f'Loading data: {args.dataset}.hdf5')
+    logging.info('Loading data: %s.hdf5', args.dataset)
     x = dataset['train']
     q = dataset['test']
     n, d = x.shape
@@ -133,14 +133,28 @@ def main(args):
     # train index
     trained_index_path = exp_train.path_to('empty_trained_index.pickle')
     train_metrics_path = exp_train.path_to('train_metrics.csv')
-    index, train_metrics = load_or_train_index(x, train_params, trained_index_path, train_metrics_path, args.force)
+    index, train_metrics = load_or_train_index(
+        x,
+        train_params,
+        trained_index_path,
+        train_metrics_path,
+        args.force,
+    )
 
     # build index
     exp_build = Experiment(build_params, root=exp_train.path, ignore=ignore) if build_params else exp_train
     print(exp_build)
     built_index_path = exp_build.path_to('built_index.pickle')
     build_metrics_path = exp_build.path_to('build_metrics.csv')
-    index, build_metrics = load_or_build_index(index, x, build_params, built_index_path, build_metrics_path, args.index_batch_size, args.force)
+    index, build_metrics = load_or_build_index(
+        index, 
+        x,
+        build_params,
+        built_index_path,
+        build_metrics_path,
+        args.index_batch_size,
+        args.force,
+    )
 
     # search and evaluate
     exp_search = Experiment(query_params, root=exp_build.path, ignore=ignore) if query_params else exp_build
@@ -167,7 +181,8 @@ def main(args):
         partial_n_queries = sum(n.shape[0] for n in nns)
         partial_query_time = partial_search_time / partial_n_queries
         if partial_query_time > args.search_timeout:
-            logging.info(f'Stopping, too slow ({partial_n_queries} queries in {partial_search_time:.2g}s: {partial_query_time:.2g} s/query).')
+            logging.info('Stopping, too slow (%d queries in %.2g s: %.2g s/query).',
+                partial_n_queries, partial_search_time, partial_query_time)
             search_stopped = pd.Series({
                 'partial_search_time': partial_search_time,
                 'partial_n_queries': partial_n_queries,
@@ -193,8 +208,8 @@ def main(args):
     search_metrics['search_cost'] = search_cost
     search_metrics.to_csv(search_metrics_path, index=False)
 
-    logging.info(f'Done in {search_time} s.')
-    logging.info('\n' + search_metrics.to_string())
+    logging.info('Done in %s s.', search_time)
+    logging.info('\n%s', search_metrics.to_string())
 
 
 if __name__ == "__main__":

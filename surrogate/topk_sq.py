@@ -19,7 +19,7 @@ def _topk_sq_encode(
     l2_normalize,       # whether to l2-normalize vectors
     ortho_matrix,       # (semi-)orthogonal matrix used to shuffle feature information
     transpose,          # if True, transpose result (returns VxN)
-    format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
+    sparse_format,      # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
     n, d = x.shape
     k = int(keep * d) if isinstance(keep, float) else keep
@@ -49,7 +49,7 @@ def _topk_sq_encode(
         data = x[rows, cols]  # n x k
         cols = np.hstack((cols, cols + d))  # n x 2*k
         data = np.hstack((data, -data)) + shift_value  # n x 2*k
-    
+
     else:
         data = xx[rows, cols]
 
@@ -68,7 +68,7 @@ def _topk_sq_encode(
         rows, cols = cols, rows
         shape = shape[::-1]
 
-    spclass = getattr(sparse, f'{format}_matrix')
+    spclass = getattr(sparse, f'{sparse_format}_matrix')
     return spclass((data, (rows, cols)), shape=shape)
 
 
@@ -78,7 +78,7 @@ def _fast_random_semiorth(m, n, seed=7):
     M = rng.normal(loc=0, scale=1 / np.sqrt(m), size=(m, n)).T
     I = np.eye(n)
 
-    for i in range(100):
+    for _ in range(100):
         M = M - 0.5 * (M.dot(M.T) - I).dot(M)
         iI = M.dot(M.T)
         if np.allclose(iI, I):
@@ -119,7 +119,8 @@ class TopKSQ(SurrogateTextIndex):
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
             dim_multiplier (float):  apply a random (semi-)orthogonal matrix to the input to expand
-                                     the number of dimensions by this factor; if 0, no transformation is applied.
+                                     the number of dimensions by this factor; if 0, no
+                                     transformation is applied.
                                      Defaults to None.
             seed (int): the random state used to automatically generate the random matrix.
         """
@@ -149,6 +150,7 @@ class TopKSQ(SurrogateTextIndex):
             discount = np.fix((shift_value * sq_factor) ** 2).astype('int')
         super().__init__(vocab_size, parallel, discount=discount, is_trained=True)
 
+    @staticmethod
     def add_subparser(subparsers, **kws):
         parser = subparsers.add_parser('topk-sq', help='TopK Scalar Quantization', **kws)
         parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')

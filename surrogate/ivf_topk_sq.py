@@ -27,7 +27,7 @@ def _ivf_topk_sq_encode(
     l2_normalize,       # whether to l2-normalize vectors
     ortho_matrix,       # (semi-)orthogonal matrix used to shuffle feature information
     transpose,          # if True, transpose result (returns VxN)
-    format,             # sparse format of result ('csr', 'csc', 'coo', etc.)
+    sparse_format,      # sparse format of result ('csr', 'csc', 'coo', etc.)
 ):
     n, d = x.shape
     c = len(centroids)
@@ -36,7 +36,7 @@ def _ivf_topk_sq_encode(
 
     if l2_normalize:
         x = normalize(x)
-    
+
     centroid_distances = cdist(x, centroids, metric='sqeuclidean')
     coarse_codes = util.bottomk_sorted(centroid_distances, nprobe, axis=1)  # n x nprobe
 
@@ -65,10 +65,10 @@ def _ivf_topk_sq_encode(
         data = x[rows, cols]  # n x k
         cols = np.hstack((cols, cols + d))  # n x 2*k
         data = np.hstack((data, -data)) + shift_value  # n x 2*k
-    
+
     else:
         data = xx[rows, cols]
-    
+
     cols = np.stack([cols + coarse_codes[:, [i]] * mult * d for i in range(nprobe)], axis=-1)  # n x k x nprobe
     rows = np.expand_dims(rows, axis=-1)  # n x 1 x 1
     data = np.expand_dims(data, axis=-1)  # n x (2*)k x 1
@@ -88,7 +88,7 @@ def _ivf_topk_sq_encode(
         rows, cols = cols, rows
         shape = shape[::-1]
 
-    spclass = getattr(sparse, f'{format}_matrix')
+    spclass = getattr(sparse, f'{sparse_format}_matrix')
     return spclass((data, (rows, cols)), shape=shape)
 
 
@@ -165,7 +165,8 @@ class IVFTopKSQ(SurrogateTextIndex):
         if apply_ncs:
             discount = np.fix((shift_value * sq_factor) ** 2).astype('int')
         super().__init__(vocab_size, parallel, discount=discount, is_trained=False)
-    
+
+    @staticmethod
     def add_subparser(subparsers, **kws):
         parser = subparsers.add_parser('ivf-topk-sq', help='Chunked TopK Scalar Quantization', **kws)
         parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
@@ -215,7 +216,7 @@ class IVFTopKSQ(SurrogateTextIndex):
             results = Parallel(n_jobs=-1, prefer='threads', require='sharedmem')(jobs)
             results = sparse.hstack(results) if inverted else sparse.vstack(results)
             return results
-        
+
         # non-parallel version
         return _ivf_topk_sq_encode(x, *encode_args)
 
@@ -223,7 +224,7 @@ class IVFTopKSQ(SurrogateTextIndex):
         self,
         x,
         max_samples_per_centroid=256,
-        kmeans_kws={},
+        kmeans_kws=None,
     ):
         """ Learn parameters from data.
         Args:
@@ -234,7 +235,7 @@ class IVFTopKSQ(SurrogateTextIndex):
         if self.centroids_cache_dir:
             centroid_cache = self.centroids_cache_dir / f'centroids_n{self.c}_seed{self.seed}.npy'
             if centroid_cache.exists():
-                logging.info(f'Loading centroids from {centroid_cache}')
+                logging.info('Loading centroids from %s', centroid_cache)
                 self._centroids = np.load(centroid_cache)
                 self.is_trained = True
                 return
@@ -247,11 +248,12 @@ class IVFTopKSQ(SurrogateTextIndex):
         xt = x
         max_samples = max_samples_per_centroid * self.c
         if nx > max_samples:  # subsample train set
-            logging.info(f'subsampling {max_samples} / {nx} for coarse centroid training.')
+            logging.info('subsampling %s / %s for coarse centroid training.', max_samples, nx)
             subset = np.random.choice(nx, size=max_samples, replace=False)
             xt = x[subset]
 
         # compute coarse centroids
+        kmeans_kws = kmeans_kws or {}
         l1_kmeans = MiniBatchKMeans(
             n_clusters=self.c,
             batch_size=256*cpu_count(),
@@ -265,7 +267,6 @@ class IVFTopKSQ(SurrogateTextIndex):
         self.is_trained = True
 
         if centroid_cache:
-            logging.info(f'Saving centroids to {centroid_cache}')
+            logging.info('Saving centroids to %s', centroid_cache)
             centroid_cache.parent.mkdir(parents=True, exist_ok=True)
             np.save(centroid_cache, self._centroids)
-

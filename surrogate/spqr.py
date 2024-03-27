@@ -22,7 +22,7 @@ def _spqr_train_sklearn(
     f_redo=1,                     # number of kmeans runs with different seeds (fine)
     f_iter=100,                   # maximum number of kmeans iterations (fine)
     max_samples_per_centroid=256, # max samples per centroid; if more, we subsample
-    verbose=0                     # verbosity level
+    verbose=0,                    # verbosity level
 ):
     # kmeans = KMeans
     kmeans = functools.partial(MiniBatchKMeans, batch_size=256*cpu_count(), compute_labels=False)
