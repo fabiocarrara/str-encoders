@@ -17,12 +17,64 @@ from . import util
 from .str_index import SurrogateTextIndex
 
 
+def _topk_vanilla(x, k):
+    x = np.atleast_2d(x)
+    n, d = x.shape
+
+    rows = np.arange(n).reshape(n, 1)  # n x 1
+    cols = util.topk_sorted(x, k, axis=1)  # n x k
+    data = x[rows, cols]  # n x k
+
+    return rows, cols, data, d
+
+
+def _topk_crelu(x, k):
+    x = np.atleast_2d(x)
+    n, d = x.shape
+
+    absx = np.fabs(x)
+    rows = np.arange(n).reshape(n, 1)  # n x 1
+    cols = util.topk_sorted(absx, k, axis=1)  # n x k
+    data = absx[rows, cols]  # n x k
+
+    is_positive = x[rows, cols] > 0  # n x k
+    cols += np.where(is_positive, 0, d)  # shift indices of negatives after positives
+
+    new_d = 2 * d
+
+    return rows, cols, data, new_d
+
+
+def _topk_softmax(x, k):
+    x = np.atleast_2d(x)
+
+    # apply softmax per row
+    xmax = np.max(x, axis=1, keepdims=True)  # n x 1
+    x = x - xmax  # copy?? it should be..
+    x = np.exp(x, out=x)  # n x d
+    norm = np.sum(x, axis=1, keepdims=True)  # n x 1
+    x = np.divide(x, norm, out=x)  # n x d
+
+    # apply vanilla top-k
+    return _topk_vanilla(x, k)
+
+
+POSITIVIZE_FUNCS = {
+    'crelu': _topk_crelu,
+    'softmax': _topk_softmax,
+}
+
+POSITIVIZE_DIM_MULTIPLIER = {
+    'crelu': 2,
+    'softmax': 1,
+}
+
+
 def _topk_sq_encode(
     x,                  # featues to encode
     keep,               # the number or fraction of high-value components to keep
-    shift_value,        # if not None, apply Negated Concatenation and add this value
     sq_factor,          # quantization factor
-    rectify_negatives,  # whether to apply CReLU transformation
+    positivize,         # if not None, apply a positivization transform ('crelu', 'ncs', 'softmax')
     l2_normalize,       # whether to l2-normalize vectors
     ortho_matrix,       # (semi-)orthogonal matrix used to shuffle feature information
     transpose,          # if True, transpose result (returns VxN)
@@ -38,42 +90,22 @@ def _topk_sq_encode(
         x = x.dot(ortho_matrix)
         d = x.shape[1]
 
-    apply_ncs = shift_value is not None  # apply negated concatenation and shift
-    assert not (rectify_negatives and apply_ncs), "Cannot apply both CReLU and NCS"
+    topk_func = POSITIVIZE_FUNCS.get(positivize, _topk_vanilla)
+    rows, cols, data, new_d = topk_func(x, k)
 
-    mult = 2 if rectify_negatives or apply_ncs else 1
-    xx = np.fabs(x) if rectify_negatives or apply_ncs else x
-
-    rows = np.arange(n).reshape(n, 1)  # n x 1
-    cols = util.topk_sorted(xx, k, axis=1)  # n x k
-
-    if rectify_negatives:
-        data = xx[rows, cols]  # n x k
-        is_positive = x[rows, cols] > 0  # n x k
-        cols += np.where(is_positive, 0, d)  # shift indices of negatives after positives
-
-    elif apply_ncs:
-        data = x[rows, cols]  # n x k
-        cols = np.hstack((cols, cols + d))  # n x 2*k
-        data = np.hstack((data, -data)) + shift_value  # n x 2*k
-
-    else:
-        data = xx[rows, cols]
-
-    rows, cols, data = np.broadcast_arrays(rows, cols, data)  # n x k, or n x 2*k
+    rows, cols, data = np.broadcast_arrays(rows, cols, data)  # n x new_d
 
     rows = rows.flatten()
     cols = cols.flatten()
     data = data.flatten()
 
-    shape = (n, mult * d)
-
     # scalar quantization
     data = np.fix(sq_factor * data.astype(np.float64)).astype('int')
 
+    shape = (n, new_d)
     if transpose:
         rows, cols = cols, rows
-        shape = shape[::-1]
+        shape = (new_d, n)
 
     spclass = getattr(sparse, f'{sparse_format}_matrix')
     return spclass((data, (rows, cols)), shape=shape)
@@ -102,9 +134,8 @@ class TopKSQ(SurrogateTextIndex):
         self,
         d,
         keep=0.25,
-        shift_value=None,
         sq_factor=1000,
-        rectify_negatives=False,
+        positivize=None,
         l2_normalize=True,
         dim_multiplier=None,
         seed=42,
@@ -116,13 +147,11 @@ class TopKSQ(SurrogateTextIndex):
             keep (int or float): if int, number of components to keep;
                                  if float, the fraction of components to keep (must
                                  be between 0.0 and dim_multiplier). Defaults to 0.25.
-            shift_value (float): if not None, applies negated concatenation and adds
-                                 this value to components to make them positive.
-                                 Defaults to 1.
             sq_factor (float): multiplicative factor controlling scalar quantization.
                                Defaults to 1000.
-            rectify_negatives (bool): whether to apply CReLU transform.
-                                      Defaults to False.
+            positivize (str): if not None, apply a positivization transform to the input
+                              before encoding; possible values are 'crelu', 'ncs', 'softmax'.
+                              Defaults to None.
             l2_normalize (bool): whether to apply l2-normalization before processing vectors;
                                  set this to False if vectors are already normalized.
                                  Defaults to True.
@@ -135,9 +164,8 @@ class TopKSQ(SurrogateTextIndex):
 
         self.d = d
         self.keep = keep
-        self.shift_value = shift_value
         self.sq_factor = sq_factor
-        self.rectify_negatives = rectify_negatives
+        self.positivize = positivize
         self.l2_normalize = l2_normalize
         self.dim_multiplier = dim_multiplier
         self.seed = seed
@@ -149,27 +177,21 @@ class TopKSQ(SurrogateTextIndex):
             self._R = _fast_random_semiorth(new_d, d, seed=self.seed)
             d = new_d
 
-        apply_ncs = shift_value is not None  # whether to apply negated concatenation and shift
-        reserve_additional_dims = self.rectify_negatives or apply_ncs
-        vocab_size = 2 * d if reserve_additional_dims else d
+        vocab_size = POSITIVIZE_DIM_MULTIPLIER.get(positivize, 1) * d
 
-        discount = 0
-        if apply_ncs:
-            discount = np.fix((shift_value * sq_factor) ** 2).astype('int')
-        super().__init__(vocab_size, parallel, discount=discount, is_trained=True)
+        super().__init__(vocab_size, parallel, is_trained=True)
 
     @staticmethod
     def add_subparser(subparsers, **kws):
         parser = subparsers.add_parser('topk-sq', help='TopK Scalar Quantization', **kws)
         parser.add_argument('-n', '--l2-normalize', action='store_true', default=False, help='L2-normalize vectors before processing.')
-        parser.add_argument('-C', '--rectify-negatives', action='store_true', default=False, help='Apply CReLU trasformation.')
-        parser.add_argument('-t', '--shift-value', type=float, default=None, help='Constant added to component values to make them positive.')
+        parser.add_argument('-p', '--positivize', default=None, choices=('crelu', 'softmax'), help='Apply a positivization transform to the input before encoding. Possible values are "crelu" and "softmax".')
         parser.add_argument('-d', '--dim-multiplier', type=float, default=1.0, help='Expand input dimensionality by this factor applying a random semi-orthogonal transformation; if 0, no transformation is applied.')
         parser.add_argument('-r', '--seed', type=int, default=42, help='seed for generating a random orthogonal matrix to apply to vectors.')
         parser.add_argument('-k', '--keep', type=float, default=0.25, help='How many values are kept when encoding expressed as fraction of the input dimensionality. Must be between 0.0 and the value of `--dim-multiplier`.')
         parser.add_argument('-s', '--sq-factor', type=float, default=1000, help='Controls the quality of the scalar quantization.')
         parser.set_defaults(
-            train_params=('l2_normalize', 'rectify_negatives', 'shift_value', 'dim_multiplier', 'seed'),
+            train_params=('l2_normalize', 'positivize', 'dim_multiplier', 'seed'),
             build_params=('keep', 'sq_factor'),
             query_params=()
         )
@@ -184,9 +206,8 @@ class TopKSQ(SurrogateTextIndex):
 
         encode_args = (
             self.keep,
-            self.shift_value,
             self.sq_factor,
-            self.rectify_negatives,
+            self.positivize,
             self.l2_normalize,
             self._R,
             transpose,
