@@ -208,6 +208,7 @@ def main(args):
     search_metrics = pd.DataFrame(search_metrics)
     search_metrics['search_time'] = search_time
     search_metrics['search_cost'] = search_cost
+    search_metrics['num_queries'] = len(nns)
     search_metrics.to_csv(search_metrics_path, index=False)
 
     logging.info('Done in %s s.', search_time)
