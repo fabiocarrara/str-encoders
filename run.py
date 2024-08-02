@@ -149,7 +149,7 @@ def main(args):
     built_index_path = exp_build.path_to('built_index.pickle')
     build_metrics_path = exp_build.path_to('build_metrics.csv')
     index, build_metrics = load_or_build_index(
-        index, 
+        index,
         x,
         build_params,
         built_index_path,

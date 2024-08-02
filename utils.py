@@ -20,7 +20,7 @@ def get_random_dataset(metric, d, nx, nq, data_root='./data'):
         train = 2 * np.random.rand(nx, d).astype(np.float32) - 1
         if metric == 'angular':
             distances = normalize(test).dot(normalize(train).T)
-        else:    
+        else:
             distances = test.dot(train.T)
         neighbors = distances.argsort(axis=1)[:, ::-1].astype(np.int32)
 
@@ -29,7 +29,7 @@ def get_random_dataset(metric, d, nx, nq, data_root='./data'):
             f.create_dataset('test', data=test)
             f.create_dataset('distances', data=distances)
             f.create_dataset('neighbors', data=neighbors)
-    
+
     return h5py.File(datapath, 'r')
 
 
@@ -40,7 +40,7 @@ def get_ann_benchmark(dataset_name, data_root='./data'):
     if not datapath.exists():
         url = f'http://ann-benchmarks.com/{dataset_name}.hdf5'
         download_file(url, str(datapath))
-    
+
     return h5py.File(datapath, 'r')
 
 
@@ -65,7 +65,7 @@ def get_dataset(dataset_name, data_root='./data'):
         metric = attributes[1]
         d, nx, nq = map(int, attributes[2:])
         return get_random_dataset(metric, d, nx, nq, data_root=data_root)
-    
+
     return get_ann_benchmark(dataset_name, data_root=data_root)
 
 
