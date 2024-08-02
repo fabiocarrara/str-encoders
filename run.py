@@ -64,7 +64,9 @@ def load_or_build_index(index, x, build_params, built_index_path, build_metrics_
     if not Path(built_index_path).exists() or force:
         index.reset(build_params)
 
-        logging.info('Building index ...')
+        index_repr = ' '.join([f'{k}={v}' for k, v in build_params.items()])
+        logging.info('Building index: (%s)', index_repr)
+
         n = len(x)
         batch_size = index_batch_size or n
         build_time = time.time()
