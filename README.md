@@ -61,8 +61,20 @@ q_docs = surrogate.generate_documents(q_enc)
 print(next(q_docs))
 ```
 
+# Reproduce Results
+Use the `run.py` scripts to run experiments on [ANN-Benchmarks](https://github.com/erikbern/ann-benchmarks?tab=readme-ov-file#data-sets) compatible datasets. Datasets are searched by default in `data/`. If missing, the script tries to download the HDF5 files from [ann-benchmarks.com](http://ann-benchmarks.com). Make sure to add to the `data/` directory the datasets not present on ANN-Benchmarks, like [`coco-i2i-512-angular` and `coco-t2i-512-angular`](https://github.com/fabiocarrara/str-encoders/releases/tag/v0.1.3).
+
+```bash
+# Run Vec2Doc with dimensionality multiplier 5 (m=5d), CReLU positivization, keeping 75% of top magnitude components, s=10000
+python run.py glove-100-angular topk-sq --l2-normalize --positivize crelu --dim-multiplier 5 --keep 0.75 --sq-factor 10000 --seed 42 
+
+## run with -h for additional details on script and index arguments
+python run.py -h
+python run.py whatever top-sq -h
+```
+
 # References
-Carrara et al., Vec2Doc: Transforming Dense Vectors into Sparse Representations for Efficient Information Retrieval. SISAP 2023.
+Carrara et al., [Vec2Doc: Transforming Dense Vectors into Sparse Representations for Efficient Information Retrieval](https://doi.org/10.1007/978-3-031-46994-7_18). SISAP 2023.
 
 Carrara et al., [Approximate nearest neighbor search on standard search engines](https://link.springer.com/chapter/10.1007/978-3-031-17849-8_17). SISAP 2022.
 
